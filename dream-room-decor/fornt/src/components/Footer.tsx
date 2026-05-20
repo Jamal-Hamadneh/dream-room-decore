@@ -10,6 +10,9 @@ export function Footer() {
             Honest furniture, made to live with for years. Designed in Copenhagen.
           </p>
         </div>
+
+
+        
         <div>
           <h4 className="mb-3 text-xs font-semibold uppercase tracking-widest text-muted-foreground">Shop</h4>
           <ul className="space-y-2 text-sm">
