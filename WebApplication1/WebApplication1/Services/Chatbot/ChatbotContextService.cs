@@ -7,7 +7,7 @@ using WebApplication1.Options;
 
 namespace WebApplication1.Services;
 
-public class ChatbotContextService(ApplicationDbContext context, IOptions<ChatwootOptions> chatwootOptions) : IChatbotContextService
+public class ChatbotContextService(ApplicationDbContext context, IOptions<TawkOptions> tawkOptions) : IChatbotContextService
 {
     public async Task<ChatbotContextResponse> GetContextAsync(int userId, CancellationToken cancellationToken = default)
     {
@@ -77,12 +77,18 @@ public class ChatbotContextService(ApplicationDbContext context, IOptions<Chatwo
         };
     }
 
-    public ChatwootConfigResponse GetChatwootConfig()
+    public TawkConfigResponse GetTawkConfig()
     {
-        return new ChatwootConfigResponse
+        var propertyId = tawkOptions.Value.PropertyId;
+        var widgetId = tawkOptions.Value.WidgetId;
+        var isConfigured = !string.IsNullOrWhiteSpace(propertyId) && !string.IsNullOrWhiteSpace(widgetId);
+
+        return new TawkConfigResponse
         {
-            BaseUrl = chatwootOptions.Value.BaseUrl,
-            WebsiteToken = chatwootOptions.Value.WebsiteToken
+            PropertyId = propertyId,
+            WidgetId = widgetId,
+            EmbedUrl = isConfigured ? $"https://embed.tawk.to/{propertyId}/{widgetId}" : string.Empty,
+            IsConfigured = isConfigured
         };
     }
 }

@@ -22,7 +22,7 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
 builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection("Jwt"));
 builder.Services.Configure<CloudinaryOptions>(builder.Configuration.GetSection("Cloudinary"));
 builder.Services.Configure<OpenAiOptions>(builder.Configuration.GetSection("OpenAi"));
-builder.Services.Configure<ChatwootOptions>(builder.Configuration.GetSection("Chatwoot"));
+builder.Services.Configure<TawkOptions>(builder.Configuration.GetSection("Tawk"));
 builder.Services.AddScoped<PasswordHasher<User>>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<ICloudinaryService, CloudinaryService>();

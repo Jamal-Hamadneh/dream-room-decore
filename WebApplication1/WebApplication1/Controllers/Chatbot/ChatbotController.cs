@@ -12,9 +12,9 @@ public class ChatbotController(IChatbotContextService chatbotContextService) : C
 {
     [HttpGet("config")]
     [AllowAnonymous]
-    public ActionResult<ChatwootConfigResponse> GetConfig()
+    public ActionResult<TawkConfigResponse> GetConfig()
     {
-        return Ok(chatbotContextService.GetChatwootConfig());
+        return Ok(chatbotContextService.GetTawkConfig());
     }
 
     [HttpGet("context")]

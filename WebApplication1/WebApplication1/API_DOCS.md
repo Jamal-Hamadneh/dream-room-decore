@@ -528,12 +528,25 @@ If `JSON.parse(generated.aiAnalysisJson).mode === "mock"`, OpenAI quota is unava
 Call public config:
 
 ```ts
-const config = await apiJson<{ baseUrl: string; websiteToken: string }>(
+const config = await apiJson<{
+  propertyId: string;
+  widgetId: string;
+  embedUrl: string;
+  isConfigured: boolean;
+}>(
   "/api/chatbot/config"
 );
 ```
 
-If either value is empty, hide Chatwoot widget or show a local support button.
+If `isConfigured` is false, hide the Tawk widget or show a local support button.
+
+To load the widget on a frontend page, include:
+
+```html
+<script src="/tawk-widget.js"></script>
+```
+
+The widget automatically reads `accessToken` from `localStorage`, calls `/api/chatbot/context`, and sends ecommerce context to Tawk visitor attributes.
 
 Call authenticated context when a user is logged in:
 
@@ -804,10 +817,21 @@ Returns:
 
 ## Chatbot
 
-### Get Chatwoot Config
+### Get Tawk Config
 
 ```http
 GET /api/chatbot/config
+```
+
+Returns:
+
+```json
+{
+  "propertyId": "YOUR_TAWK_PROPERTY_ID",
+  "widgetId": "YOUR_TAWK_WIDGET_ID",
+  "embedUrl": "https://embed.tawk.to/YOUR_TAWK_PROPERTY_ID/YOUR_TAWK_WIDGET_ID",
+  "isConfigured": true
+}
 ```
 
 ### Get Current User Context
@@ -832,7 +856,7 @@ Returns safe user context:
 
 ```text
 /ai-room-design.html
-/chatwoot-widget.js
+/tawk-widget.js
 ```
 
 ## Verified Local AI Test Flow
@@ -1082,12 +1106,14 @@ Response:
 
 ```json
 {
-  "baseUrl": "",
-  "websiteToken": ""
+  "propertyId": "",
+  "widgetId": "",
+  "embedUrl": "",
+  "isConfigured": false
 }
 ```
 
-Chatwoot config is empty until `Chatwoot:BaseUrl` and `Chatwoot:WebsiteToken` are configured.
+Tawk config is empty until `Tawk:PropertyId` and `Tawk:WidgetId` are configured.
 
 ```http
 GET /api/chatbot/context
