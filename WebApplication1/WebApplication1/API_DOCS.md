@@ -12,6 +12,570 @@ Most endpoints require JWT:
 Authorization: Bearer YOUR_ACCESS_TOKEN
 ```
 
+## Frontend Quickstart
+
+Use this document as the frontend integration contract. All JSON examples use camelCase because that is what the API returns.
+
+Local API constant:
+
+```ts
+export const API_BASE_URL = "http://localhost:5039";
+```
+
+Recommended token storage during development:
+
+```ts
+localStorage.setItem("accessToken", loginResponse.token);
+localStorage.setItem("refreshToken", loginResponse.refreshToken);
+```
+
+For production, prefer secure httpOnly cookies if the backend is later changed to support them.
+
+### JSON Request Helper
+
+```ts
+async function apiJson<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const token = localStorage.getItem("accessToken");
+
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...options.headers,
+    },
+  });
+
+  const data = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    throw data ?? { title: "Request failed", status: response.status };
+  }
+
+  return data as T;
+}
+```
+
+### Multipart Request Helper
+
+Do not set `Content-Type` manually for `FormData`; the browser adds the boundary.
+
+```ts
+async function apiForm<T>(path: string, formData: FormData): Promise<T> {
+  const token = localStorage.getItem("accessToken");
+
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method: "POST",
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: formData,
+  });
+
+  const data = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    throw data ?? { title: "Request failed", status: response.status };
+  }
+
+  return data as T;
+}
+```
+
+### Error Response Shapes
+
+Normal API errors:
+
+```json
+{
+  "title": "Product must be in your cart before using it in room design.",
+  "status": 400
+}
+```
+
+Validation errors:
+
+```json
+{
+  "title": "Validation failed.",
+  "status": 400,
+  "errors": {
+    "email": ["Email is required."]
+  }
+}
+```
+
+Database/relationship errors:
+
+```json
+{
+  "title": "Database operation failed.",
+  "status": 400,
+  "detail": "Check related ids, unique fields, and required values."
+}
+```
+
+Common statuses the frontend should handle:
+
+| Status | Meaning | Frontend Action |
+| --- | --- | --- |
+| `400` | Invalid request or business rule failed | Show `title` to user |
+| `401` | Missing/expired access token | Try refresh token, then redirect to login |
+| `403` | Authenticated but not allowed | Show access denied |
+| `404` | Resource not found | Show empty/not-found state |
+| `409` | Conflict, duplicate, or invalid state | Show `title` to user |
+| `500` | Unexpected backend error | Show generic error and check backend logs |
+
+### Refresh Token Flow
+
+When a protected request returns `401`, call refresh once:
+
+```ts
+type AuthResponse = {
+  id: number;
+  firstName: string;
+  lastName: string;
+  email: string;
+  role: string;
+  token: string;
+  refreshToken: string;
+  expiresAt: string;
+  refreshTokenExpiresAt: string;
+};
+
+async function refreshAccessToken(): Promise<AuthResponse> {
+  const refreshToken = localStorage.getItem("refreshToken");
+
+  const data = await apiJson<AuthResponse>("/api/auth/refresh", {
+    method: "POST",
+    body: JSON.stringify({ refreshToken }),
+  });
+
+  localStorage.setItem("accessToken", data.token);
+  localStorage.setItem("refreshToken", data.refreshToken);
+  return data;
+}
+```
+
+## Frontend Endpoint Map
+
+| Feature | Method | Endpoint | Auth | Content Type |
+| --- | --- | --- | --- | --- |
+| Login | `POST` | `/api/auth/login` | No | JSON |
+| Register | `POST` | `/api/auth/register` | No | JSON |
+| Refresh token | `POST` | `/api/auth/refresh` | No | JSON |
+| Logout | `POST` | `/api/auth/logout` | Yes | JSON |
+| Categories | `GET` | `/api/categories` | Yes | JSON |
+| Products | `GET` | `/api/products` | Yes | JSON |
+| Product images | `GET` | `/api/product-images` | Yes | JSON |
+| Product variants | `GET` | `/api/product-variants` | Yes | JSON |
+| Cart | `GET` | `/api/cart` | Yes | JSON |
+| Cart items | `GET` | `/api/cart-items` | Yes | JSON |
+| Favorites | `GET` | `/api/favorites` | Yes | JSON |
+| Orders | `GET` | `/api/orders` | Yes | JSON |
+| Reviews | `GET` | `/api/reviews` | Yes | JSON |
+| Chatbot config | `GET` | `/api/chatbot/config` | No | JSON |
+| Chatbot context | `GET` | `/api/chatbot/context` | Yes | JSON |
+| Upload room | `POST` | `/AiRoom/UploadAndCreateDesign` | Yes | FormData |
+| Save placement | `POST` | `/AiRoom/SavePlacement` | Yes | JSON |
+| Update placement | `POST` | `/AiRoom/UpdatePlacement` | Yes | JSON |
+| Switch product | `POST` | `/AiRoom/SwitchProduct` | Yes | JSON |
+| Generate room image | `POST` | `/AiRoom/GenerateRealisticDesign` | Yes | JSON |
+
+## Main Frontend DTOs
+
+### Product Card DTO
+
+Use this for product listing/grid cards:
+
+```ts
+type ProductResponse = {
+  id: number;
+  categoryId: number;
+  name: string;
+  description: string;
+  price: number;
+  discountPrice: number | null;
+  stockQuantity: number;
+  material: string | null;
+  color: string | null;
+  height: number | null;
+  width: number | null;
+  depth: number | null;
+  isActive: boolean;
+  isFeatured: boolean;
+  averageRating: number;
+  reviewsCount: number;
+  createdAt: string;
+  updatedAt: string | null;
+  category: { id: number; name: string };
+  mainImageUrl: string | null;
+  images: { id: number; imageUrl: string; isMain: boolean }[];
+  variants: ProductVariantSummary[];
+};
+
+type ProductVariantSummary = {
+  id: number;
+  color: string | null;
+  size: string | null;
+  material: string | null;
+  sku: string;
+  price: number;
+  stockQuantity: number;
+};
+```
+
+### Cart Item DTO
+
+Use this for cart page and for AI room design product tray:
+
+```ts
+type CartItemResponse = {
+  id: number;
+  cartId: number;
+  productId: number;
+  productVariantId: number | null;
+  quantity: number;
+  createdAt: string;
+  product: {
+    id: number;
+    name: string;
+    price: number;
+    discountPrice: number | null;
+    mainImageUrl: string | null;
+    isActive: boolean;
+  };
+  variant: ProductVariantSummary | null;
+  unitPrice: number;
+  totalPrice: number;
+};
+```
+
+### AI Room DTOs
+
+```ts
+type AiRoomProductResponse = {
+  productId: number;
+  name: string;
+  description: string;
+  material: string | null;
+  color: string | null;
+  height: number | null;
+  width: number | null;
+  depth: number | null;
+  quantity: number;
+  imageUrl: string | null;
+};
+
+type UploadAndCreateDesignResponse = {
+  roomUploadId: number;
+  roomDesignId: number;
+  imageUrl: string;
+  cartProducts: AiRoomProductResponse[];
+};
+
+type PlacementResponse = {
+  id: number;
+  roomDesignId: number;
+  productId: number;
+  positionX: number;
+  positionY: number;
+  rotation: number;
+  scale: number;
+  zIndex: number;
+};
+
+type GenerateRealisticDesignResponse = {
+  generatedRoomImageId: number;
+  generatedImageUrl: string;
+  aiAnalysisJson: string;
+};
+```
+
+## Frontend Page Flows
+
+### Login Page
+
+Call:
+
+```ts
+const login = await apiJson<AuthResponse>("/api/auth/login", {
+  method: "POST",
+  body: JSON.stringify({ email, password }),
+});
+
+localStorage.setItem("accessToken", login.token);
+localStorage.setItem("refreshToken", login.refreshToken);
+```
+
+Redirect after login based on `login.role`.
+
+### Products Page
+
+Call:
+
+```ts
+const products = await apiJson<ProductResponse[]>("/api/products");
+```
+
+Recommended card fields:
+
+```ts
+product.name
+product.mainImageUrl
+product.discountPrice ?? product.price
+product.averageRating
+product.reviewsCount
+product.isFeatured
+```
+
+### Product Details Page
+
+Call:
+
+```ts
+const product = await apiJson<ProductResponse>(`/api/products/${productId}`);
+```
+
+Use `product.images` for gallery and `product.variants` for color/size choices.
+
+### Cart Page
+
+Call:
+
+```ts
+const carts = await apiJson<CartResponse[]>("/api/cart");
+const myCart = carts.find((cart) => cart.userId === loginUserId);
+const cartItems = await apiJson<CartItemResponse[]>("/api/cart-items");
+```
+
+Cart DTO:
+
+```ts
+type CartResponse = {
+  id: number;
+  userId: number;
+  createdAt: string;
+  updatedAt: string | null;
+  user: {
+    id: number;
+    fullName: string;
+    email: string;
+  };
+  items: {
+    id: number;
+    productId: number;
+    productVariantId: number | null;
+    productName: string;
+    productImageUrl: string | null;
+    variantSku: string | null;
+    quantity: number;
+    unitPrice: number;
+    totalPrice: number;
+  }[];
+  itemsCount: number;
+  totalPrice: number;
+};
+```
+
+Create cart item:
+
+```ts
+await apiJson<CartItemResponse>("/api/cart-items", {
+  method: "POST",
+  body: JSON.stringify({
+    cartId: myCart.id,
+    productId,
+    productVariantId: selectedVariantId ?? null,
+    quantity,
+  }),
+});
+```
+
+Update cart item quantity:
+
+```ts
+await apiJson<CartItemResponse>(`/api/cart-items/${cartItemId}`, {
+  method: "PUT",
+  body: JSON.stringify({
+    cartId,
+    productId,
+    productVariantId,
+    quantity,
+  }),
+});
+```
+
+Delete cart item:
+
+```ts
+await fetch(`${API_BASE_URL}/api/cart-items/${cartItemId}`, {
+  method: "DELETE",
+  headers: { Authorization: `Bearer ${localStorage.getItem("accessToken")}` },
+});
+```
+
+### AI Room Design Page
+
+The user must have at least one product in cart before this page can create a room design.
+
+Step 1, fetch cart items for the furniture tray:
+
+```ts
+const cartItems = await apiJson<CartItemResponse[]>("/api/cart-items");
+```
+
+Step 2, upload room image:
+
+```ts
+const formData = new FormData();
+formData.append("RoomImage", file);
+formData.append("RoomType", "living_room");
+formData.append("Height", "3");
+formData.append("Width", "5");
+formData.append("Depth", "4");
+
+const design = await apiForm<UploadAndCreateDesignResponse>(
+  "/AiRoom/UploadAndCreateDesign",
+  formData
+);
+```
+
+Step 3, render uploaded room:
+
+```tsx
+<img src={design.imageUrl} alt="Uploaded room" />
+```
+
+Step 4, render cart products as draggable furniture:
+
+```ts
+design.cartProducts.forEach((product) => {
+  product.productId;
+  product.name;
+  product.imageUrl;
+});
+```
+
+Step 5, save a furniture placement after drag/drop:
+
+```ts
+const placement = await apiJson<PlacementResponse>("/AiRoom/SavePlacement", {
+  method: "POST",
+  body: JSON.stringify({
+    roomDesignId: design.roomDesignId,
+    productId,
+    positionX,
+    positionY,
+    rotation,
+    scale,
+    zIndex,
+  }),
+});
+```
+
+Step 6, update placement after moving/resizing:
+
+```ts
+await apiJson<PlacementResponse>("/AiRoom/UpdatePlacement", {
+  method: "POST",
+  body: JSON.stringify({
+    placementId: placement.id,
+    positionX,
+    positionY,
+    rotation,
+    scale,
+    zIndex,
+  }),
+});
+```
+
+Step 7, switch one cart product to another cart product:
+
+```ts
+await apiJson<PlacementResponse>("/AiRoom/SwitchProduct", {
+  method: "POST",
+  body: JSON.stringify({
+    roomDesignId: design.roomDesignId,
+    oldProductId,
+    newProductId,
+  }),
+});
+```
+
+Step 8, generate final image:
+
+```ts
+const generated = await apiJson<GenerateRealisticDesignResponse>(
+  "/AiRoom/GenerateRealisticDesign",
+  {
+    method: "POST",
+    body: JSON.stringify({ roomDesignId: design.roomDesignId }),
+  }
+);
+```
+
+Step 9, render generated image:
+
+```tsx
+<img src={generated.generatedImageUrl} alt="Generated room design" />
+```
+
+If `JSON.parse(generated.aiAnalysisJson).mode === "mock"`, OpenAI quota is unavailable and the backend used fallback mode.
+
+### Chatbot Widget
+
+Call public config:
+
+```ts
+const config = await apiJson<{ baseUrl: string; websiteToken: string }>(
+  "/api/chatbot/config"
+);
+```
+
+If either value is empty, hide Chatwoot widget or show a local support button.
+
+Call authenticated context when a user is logged in:
+
+```ts
+const context = await apiJson<ChatbotContextResponse>("/api/chatbot/context");
+```
+
+Context DTO:
+
+```ts
+type ChatbotContextResponse = {
+  user: {
+    id: number;
+    fullName: string;
+    email: string;
+    role: string;
+  };
+  cartItems: {
+    productId: number;
+    productName: string;
+    quantity: number;
+    price: number;
+    variantSku: string | null;
+  }[];
+  recentOrders: {
+    orderId: number;
+    totalPrice: number;
+    status: string;
+    paymentStatus: string;
+    createdAt: string;
+  }[];
+  roomDesigns: {
+    roomDesignId: number;
+    roomUploadId: number;
+    name: string;
+    roomType: string | null;
+    imageUrl: string;
+    createdAt: string;
+  }[];
+};
+```
+
 ## Auth
 
 ### Register
