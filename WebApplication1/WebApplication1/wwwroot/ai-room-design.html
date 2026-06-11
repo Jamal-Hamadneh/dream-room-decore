@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>AI Room Design</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 24px; background: #f7f7f7; color: #222; }
+        .panel { background: #fff; padding: 16px; border-radius: 10px; margin-bottom: 16px; box-shadow: 0 1px 5px rgba(0,0,0,.08); }
+        .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: end; }
+        label { display: block; font-size: 13px; margin-bottom: 4px; }
+        input, select, button { padding: 8px; border: 1px solid #ccc; border-radius: 6px; }
+        button { background: #111; color: white; cursor: pointer; }
+        button:disabled { opacity: .5; cursor: not-allowed; }
+        #canvas { position: relative; width: 100%; max-width: 1000px; min-height: 560px; background-size: contain; background-repeat: no-repeat; background-position: center; border: 1px solid #ddd; overflow: hidden; }
+        .furniture { position: absolute; width: 120px; cursor: move; transform-origin: center; user-select: none; }
+        .selected { outline: 2px solid #2563eb; }
+        #products img { width: 80px; height: 80px; object-fit: contain; border: 1px solid #ddd; border-radius: 8px; padding: 4px; background: white; cursor: pointer; }
+        #generatedImage { max-width: 100%; border-radius: 10px; display: none; }
+        .muted { color: #666; font-size: 13px; }
+    </style>
+</head>
+<body>
+    <h1>AI Room Design</h1>
+
+    <div class="panel">
+        <p class="muted">Paste a JWT from login. The page stores it in browser localStorage.</p>
+        <div class="row">
+            <div style="flex:1">
+                <label>JWT token</label>
+                <input id="token" style="width:100%" placeholder="Bearer token">
+            </div>
+            <button onclick="saveToken()">Save Token</button>
+        </div>
+    </div>
+
+    <div class="panel">
+        <div class="row">
+            <div><label>Room image</label><input id="roomImage" type="file" accept="image/*"></div>
+            <div><label>Room type</label><input id="roomType" placeholder="living_room"></div>
+            <div><label>Height</label><input id="height" type="number" step="0.01"></div>
+            <div><label>Width</label><input id="width" type="number" step="0.01"></div>
+            <div><label>Depth</label><input id="depth" type="number" step="0.01"></div>
+            <button onclick="uploadRoom()">Upload And Create Design</button>
+        </div>
+    </div>
+
+    <div class="panel">
+        <h3>Cart Products</h3>
+        <p class="muted">Click a cart product to add it to the room. Drag it to move.</p>
+        <div id="products" class="row"></div>
+    </div>
+
+    <div class="panel">
+        <h3>Selected Furniture</h3>
+        <div class="row">
+            <div><label>Scale</label><input id="scale" type="number" step="0.1" value="1"></div>
+            <div><label>Rotation</label><input id="rotation" type="number" step="1" value="0"></div>
+            <div><label>Z Index</label><input id="zIndex" type="number" step="1" value="1"></div>
+            <div><label>Switch product</label><select id="switchProduct"></select></div>
+            <button onclick="applyTransform()">Apply</button>
+            <button onclick="switchProduct()">Switch Product</button>
+            <button onclick="generateDesign()" id="generateButton">Generate Realistic AI Design</button>
+        </div>
+    </div>
+
+    <div class="panel">
+        <div id="canvas"></div>
+    </div>
+
+    <div class="panel">
+        <h3>Generated Image</h3>
+        <p id="status" class="muted"></p>
+        <img id="generatedImage" alt="Generated room">
+    </div>
+
+<script>
+let roomDesignId = 0;
+let products = [];
+let selected = null;
+
+document.getElementById('token').value = localStorage.getItem('jwt') || '';
+
+function saveToken() {
+    localStorage.setItem('jwt', document.getElementById('token').value.trim());
+}
+
+function authHeaders() {
+    return { Authorization: 'Bearer ' + localStorage.getItem('jwt') };
+}
+
+async function uploadRoom() {
+    saveToken();
+    const file = document.getElementById('roomImage').files[0];
+    if (!file) return alert('Choose a room image first.');
+
+    const form = new FormData();
+    form.append('roomImage', file);
+    form.append('roomType', document.getElementById('roomType').value);
+    form.append('height', document.getElementById('height').value || 0);
+    form.append('width', document.getElementById('width').value || 0);
+    form.append('depth', document.getElementById('depth').value || 0);
+
+    const res = await fetch('/AiRoom/UploadAndCreateDesign', { method: 'POST', headers: authHeaders(), body: form });
+    const data = await res.json();
+    if (!res.ok) return alert(JSON.stringify(data));
+
+    roomDesignId = data.roomDesignId;
+    products = data.cartProducts;
+    document.getElementById('canvas').style.backgroundImage = `url('${data.imageUrl}')`;
+    renderProducts();
+}
+
+function renderProducts() {
+    const productsDiv = document.getElementById('products');
+    const switchSelect = document.getElementById('switchProduct');
+    productsDiv.innerHTML = '';
+    switchSelect.innerHTML = '';
+
+    products.forEach(product => {
+        const img = document.createElement('img');
+        img.src = product.imageUrl || '';
+        img.title = product.name;
+        img.onclick = () => addFurniture(product);
+        productsDiv.appendChild(img);
+
+        const option = document.createElement('option');
+        option.value = product.productId;
+        option.textContent = product.name;
+        switchSelect.appendChild(option);
+    });
+}
+
+function addFurniture(product) {
+    const img = document.createElement('img');
+    img.src = product.imageUrl || '';
+    img.className = 'furniture';
+    img.dataset.productId = product.productId;
+    img.dataset.scale = '1';
+    img.dataset.rotation = '0';
+    img.dataset.zIndex = '1';
+    img.style.left = '120px';
+    img.style.top = '120px';
+    img.style.zIndex = '1';
+    img.onclick = () => selectFurniture(img);
+    makeDraggable(img);
+    document.getElementById('canvas').appendChild(img);
+    selectFurniture(img);
+    savePlacement(img);
+}
+
+function selectFurniture(element) {
+    document.querySelectorAll('.furniture').forEach(x => x.classList.remove('selected'));
+    selected = element;
+    selected.classList.add('selected');
+    document.getElementById('scale').value = selected.dataset.scale;
+    document.getElementById('rotation').value = selected.dataset.rotation;
+    document.getElementById('zIndex').value = selected.dataset.zIndex;
+}
+
+function makeDraggable(element) {
+    let offsetX = 0, offsetY = 0;
+    element.onmousedown = e => {
+        selectFurniture(element);
+        offsetX = e.offsetX;
+        offsetY = e.offsetY;
+        document.onmousemove = moveEvent => {
+            element.style.left = (moveEvent.pageX - element.parentElement.offsetLeft - offsetX) + 'px';
+            element.style.top = (moveEvent.pageY - element.parentElement.offsetTop - offsetY) + 'px';
+        };
+        document.onmouseup = () => {
+            document.onmousemove = null;
+            document.onmouseup = null;
+            savePlacement(element);
+        };
+    };
+}
+
+function applyTransform() {
+    if (!selected) return;
+    selected.dataset.scale = document.getElementById('scale').value;
+    selected.dataset.rotation = document.getElementById('rotation').value;
+    selected.dataset.zIndex = document.getElementById('zIndex').value;
+    selected.style.zIndex = selected.dataset.zIndex;
+    selected.style.transform = `scale(${selected.dataset.scale}) rotate(${selected.dataset.rotation}deg)`;
+    savePlacement(selected);
+}
+
+async function savePlacement(element) {
+    if (!roomDesignId) return;
+    const body = {
+        roomDesignId,
+        productId: Number(element.dataset.productId),
+        positionX: parseFloat(element.style.left) || 0,
+        positionY: parseFloat(element.style.top) || 0,
+        rotation: Number(element.dataset.rotation),
+        scale: Number(element.dataset.scale),
+        zIndex: Number(element.dataset.zIndex)
+    };
+    await fetch('/AiRoom/SavePlacement', { method: 'POST', headers: { ...authHeaders(), 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+}
+
+async function switchProduct() {
+    if (!selected) return;
+    const oldProductId = Number(selected.dataset.productId);
+    const newProductId = Number(document.getElementById('switchProduct').value);
+    const product = products.find(x => x.productId === newProductId);
+    const res = await fetch('/AiRoom/SwitchProduct', {
+        method: 'POST',
+        headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ roomDesignId, oldProductId, newProductId })
+    });
+    if (!res.ok) return alert(await res.text());
+    selected.dataset.productId = newProductId;
+    selected.src = product.imageUrl || '';
+}
+
+async function generateDesign() {
+    document.getElementById('generateButton').disabled = true;
+    document.getElementById('status').textContent = 'Generating...';
+    const res = await fetch('/AiRoom/GenerateRealisticDesign', {
+        method: 'POST',
+        headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ roomDesignId })
+    });
+    const data = await res.json();
+    document.getElementById('generateButton').disabled = false;
+    if (!res.ok) return alert(JSON.stringify(data));
+    document.getElementById('status').textContent = 'Generated successfully.';
+    document.getElementById('generatedImage').src = data.generatedImageUrl;
+    document.getElementById('generatedImage').style.display = 'block';
+}
+</script>
+</body>
+</html>
