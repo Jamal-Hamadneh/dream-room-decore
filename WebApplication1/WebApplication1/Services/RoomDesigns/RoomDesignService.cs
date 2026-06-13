@@ -24,6 +24,32 @@ public class RoomDesignService(IRoomDesignRepository repository, ICrudMapper<Roo
         return design is null ? null : ToResponse(design);
     }
 
+    public override async Task<RoomDesignResponse> CreateAsync(RoomDesignRequest request, CancellationToken cancellationToken = default)
+    {
+        var entity = Mapper.ToEntity(request);
+        entity.CreatedAt = DateTime.UtcNow;
+        var created = await Repository.AddAsync(entity, cancellationToken);
+
+        var design = await Query().FirstAsync(d => d.Id == created.Id, cancellationToken);
+        return ToResponse(design);
+    }
+
+    public override async Task<RoomDesignResponse?> UpdateAsync(int id, RoomDesignRequest request, CancellationToken cancellationToken = default)
+    {
+        var entity = await Repository.GetByIdAsync(id, cancellationToken);
+        if (entity is null)
+        {
+            return null;
+        }
+
+        Mapper.UpdateEntity(entity, request);
+        entity.UpdatedAt = DateTime.UtcNow;
+        await Repository.UpdateAsync(entity, cancellationToken);
+
+        var design = await Query().FirstAsync(d => d.Id == id, cancellationToken);
+        return ToResponse(design);
+    }
+
     private IQueryable<RoomDesign> Query() => context.RoomDesigns
         .AsNoTracking()
         .Include(design => design.RoomUpload)
