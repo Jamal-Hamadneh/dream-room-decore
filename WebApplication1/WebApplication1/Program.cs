@@ -28,6 +28,7 @@ builder.Services.Configure<CloudinaryOptions>(builder.Configuration.GetSection("
 builder.Services.Configure<OpenAiOptions>(builder.Configuration.GetSection("OpenAi"));
 builder.Services.Configure<GeminiOptions>(builder.Configuration.GetSection("Gemini"));
 builder.Services.Configure<TawkOptions>(builder.Configuration.GetSection("Tawk"));
+builder.Services.Configure<StripeOptions>(builder.Configuration.GetSection("Stripe"));
 builder.Services.AddScoped<PasswordHasher<User>>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<ICloudinaryService, CloudinaryService>();
@@ -35,6 +36,7 @@ builder.Services.AddHttpClient<IOpenAiService, OpenAiService>();
 builder.Services.AddHttpClient<IRoomCompositionService, RoomCompositionService>();
 builder.Services.AddScoped<IRoomAiService, RoomAiService>();
 builder.Services.AddScoped<IChatbotContextService, ChatbotContextService>();
+builder.Services.AddScoped<IStripePaymentService, StripePaymentService>();
 builder.Services.AddScoped<IChatCompletionService, ChatCompletionService>();
 builder.Services.AddScoped<IProductRecommendationService, ProductRecommendationService>();
 builder.Services.AddScoped<IChatAssistantService, ChatAssistantService>();

@@ -24,6 +24,45 @@ public class OrderService(IOrderRepository repository, ICrudMapper<Order, OrderR
         return order is null ? null : ToResponse(order);
     }
 
+    public override async Task<OrderResponse> CreateAsync(OrderRequest request, CancellationToken cancellationToken = default)
+    {
+        var order = new Order
+        {
+            UserId = request.UserId,
+            AddressId = request.AddressId,
+            TotalPrice = request.TotalPrice,
+            Status = request.Status,
+            PaymentStatus = request.PaymentStatus,
+            StripePaymentIntentId = request.StripePaymentIntentId,
+            CreatedAt = DateTime.UtcNow
+        };
+
+        context.Orders.Add(order);
+        await context.SaveChangesAsync(cancellationToken);
+
+        return (await GetByIdAsync(order.Id, cancellationToken))!;
+    }
+
+    public override async Task<OrderResponse?> UpdateAsync(int id, OrderRequest request, CancellationToken cancellationToken = default)
+    {
+        var order = await context.Orders.FindAsync([id], cancellationToken);
+        if (order is null)
+        {
+            return null;
+        }
+
+        order.UserId = request.UserId;
+        order.AddressId = request.AddressId;
+        order.TotalPrice = request.TotalPrice;
+        order.Status = request.Status;
+        order.PaymentStatus = request.PaymentStatus;
+        order.StripePaymentIntentId = request.StripePaymentIntentId;
+        order.UpdatedAt = DateTime.UtcNow;
+        await context.SaveChangesAsync(cancellationToken);
+
+        return await GetByIdAsync(id, cancellationToken);
+    }
+
     private IQueryable<Order> Query() => context.Orders
         .AsNoTracking()
         .Include(order => order.User)

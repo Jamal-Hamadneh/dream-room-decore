@@ -176,6 +176,10 @@ async function refreshAccessToken(): Promise<AuthResponse> {
 | Reviews | `GET` | `/api/reviews` | Yes | JSON |
 | Chatbot config | `GET` | `/api/chatbot/config` | No | JSON |
 | Chatbot context | `GET` | `/api/chatbot/context` | Yes | JSON |
+| Stripe config | `GET` | `/api/stripe/config` | No | JSON |
+| Create payment intent | `POST` | `/api/stripe/payment-intents` | Yes | JSON |
+| Sync payment intent | `POST` | `/api/stripe/sync-payment-intent` | Yes | JSON |
+| Stripe webhook | `POST` | `/api/stripe/webhook` | No | Raw JSON |
 | Send chat message | `POST` | `/api/chat/message` | Yes | JSON |
 | List chat conversations | `GET` | `/api/chat/conversations` | Yes | JSON |
 | Get chat conversation | `GET` | `/api/chat/conversations/{id}` | Yes | JSON |
@@ -744,6 +748,102 @@ type ChatbotContextResponse = {
     createdAt: string;
   }[];
 };
+```
+
+### Stripe Payment Page
+
+Install Stripe frontend packages:
+
+```bash
+npm install @stripe/stripe-js @stripe/react-stripe-js
+```
+
+Configure local backend secrets in `.env`:
+
+```env
+STRIPE_SECRET_KEY=sk_test_your_secret_key
+STRIPE_PUBLISHABLE_KEY=pk_test_your_publishable_key
+STRIPE_WEBHOOK_SECRET=whsec_optional_for_webhooks
+```
+
+Get public Stripe config:
+
+```ts
+type StripeConfigResponse = {
+  publishableKey: string;
+  currency: string;
+  isConfigured: boolean;
+};
+
+const stripeConfig = await apiJson<StripeConfigResponse>("/api/stripe/config");
+```
+
+Create a payment intent for an existing order:
+
+```ts
+type CreatePaymentIntentResponse = {
+  orderId: number;
+  paymentId: number;
+  paymentIntentId: string;
+  clientSecret: string;
+  amount: number;
+  currency: string;
+  status: string;
+  publishableKey: string;
+};
+
+const intent = await apiJson<CreatePaymentIntentResponse>("/api/stripe/payment-intents", {
+  method: "POST",
+  body: JSON.stringify({ orderId }),
+});
+```
+
+Use Stripe Elements with `intent.clientSecret`. After payment, sync the backend:
+
+```ts
+type SyncPaymentIntentResponse = {
+  orderId: number;
+  paymentId: number;
+  paymentIntentId: string;
+  paymentStatus: "pending" | "paid" | "failed";
+  orderStatus: string;
+  stripeStatus: string;
+};
+
+const synced = await apiJson<SyncPaymentIntentResponse>("/api/stripe/sync-payment-intent", {
+  method: "POST",
+  body: JSON.stringify({ paymentIntentId: intent.paymentIntentId }),
+});
+```
+
+Stripe test card:
+
+```text
+4242 4242 4242 4242
+Any future expiry
+Any CVC
+Any postal code
+```
+
+Backend status mapping:
+
+| Stripe Status | Payment Status | Order Payment Status |
+| --- | --- | --- |
+| `succeeded` | `succeeded` | `paid` |
+| `requires_payment_method` | `pending` | `pending` |
+| `canceled` | `failed` | `failed` |
+| Other statuses | `pending` | `pending` |
+
+Webhook endpoint for production/local Stripe CLI:
+
+```http
+POST /api/stripe/webhook
+```
+
+With Stripe CLI:
+
+```bash
+stripe listen --forward-to http://localhost:5039/api/stripe/webhook
 ```
 
 ## Auth
