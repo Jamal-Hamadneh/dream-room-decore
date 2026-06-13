@@ -176,11 +176,17 @@ async function refreshAccessToken(): Promise<AuthResponse> {
 | Reviews | `GET` | `/api/reviews` | Yes | JSON |
 | Chatbot config | `GET` | `/api/chatbot/config` | No | JSON |
 | Chatbot context | `GET` | `/api/chatbot/context` | Yes | JSON |
+| Send chat message | `POST` | `/api/chat/message` | Yes | JSON |
+| List chat conversations | `GET` | `/api/chat/conversations` | Yes | JSON |
+| Get chat conversation | `GET` | `/api/chat/conversations/{id}` | Yes | JSON |
+| Create chat conversation | `POST` | `/api/chat/conversations` | Yes | JSON |
+| Delete chat conversation | `DELETE` | `/api/chat/conversations/{id}` | Yes | JSON |
 | Upload room | `POST` | `/AiRoom/UploadAndCreateDesign` | Yes | FormData |
 | Save placement | `POST` | `/AiRoom/SavePlacement` | Yes | JSON |
 | Update placement | `POST` | `/AiRoom/UpdatePlacement` | Yes | JSON |
 | Switch product | `POST` | `/AiRoom/SwitchProduct` | Yes | JSON |
 | Generate room image | `POST` | `/AiRoom/GenerateRealisticDesign` | Yes | JSON |
+| Generate from composed preview | `POST` | `/AiRoom/GenerateRealisticDesignFromPreview` | Yes | FormData |
 
 ## Main Frontend DTOs
 
@@ -523,6 +529,157 @@ Step 9, render generated image:
 
 If `JSON.parse(generated.aiAnalysisJson).mode === "mock"`, OpenAI quota is unavailable and the backend used fallback mode.
 
+Better exact-layout option, generate from composed preview:
+
+```ts
+const previewBlob = await createRoomPreviewBlob({
+  roomImageUrl: design.imageUrl,
+  placements,
+  productsById,
+  width: 1024,
+  height: 1024,
+});
+
+const formData = new FormData();
+formData.append("RoomDesignId", String(design.roomDesignId));
+formData.append("PreviewImage", previewBlob, "room-preview.png");
+
+const generated = await apiForm<GenerateRealisticDesignResponse>(
+  "/AiRoom/GenerateRealisticDesignFromPreview",
+  formData
+);
+```
+
+This endpoint is better than coordinate-only generation because the frontend sends the exact image that the user sees: room background plus product layers already positioned.
+
+For exact products, the frontend composed preview is the source of truth. Draw only cart products on the canvas. The AI prompt now tells OpenAI to keep the exact product count and not add extra decor/furniture, but the frontend preview remains the only guaranteed exact layout.
+
+The AI analysis JSON can include color guidance:
+
+```ts
+const analysis = JSON.parse(generated.aiAnalysisJson);
+analysis.colorRecommendations?.palette;
+analysis.colorRecommendations?.productColorAdvice;
+analysis.colorRecommendations?.wallColorAdvice;
+analysis.colorRecommendations?.whyTheseColorsWork;
+```
+
+Use this to show recommendations like:
+
+```tsx
+<section>
+  <h3>Recommended Color Palette</h3>
+  <p>{analysis.colorRecommendations?.palette}</p>
+  <h3>Product Color Advice</h3>
+  <p>{analysis.colorRecommendations?.productColorAdvice}</p>
+</section>
+```
+
+Canvas helper example:
+
+```ts
+type PreviewPlacement = {
+  productId: number;
+  positionX: number;
+  positionY: number;
+  rotation: number;
+  scale: number;
+  zIndex: number;
+};
+
+type PreviewProduct = {
+  imageUrl: string;
+};
+
+async function loadImage(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = src;
+  });
+}
+
+async function createRoomPreviewBlob(args: {
+  roomImageUrl: string;
+  placements: PreviewPlacement[];
+  productsById: Record<number, PreviewProduct>;
+  width: number;
+  height: number;
+}): Promise<Blob> {
+  const canvas = document.createElement("canvas");
+  canvas.width = args.width;
+  canvas.height = args.height;
+
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("Canvas is not supported.");
+
+  const room = await loadImage(args.roomImageUrl);
+  ctx.drawImage(room, 0, 0, args.width, args.height);
+
+  const sortedPlacements = [...args.placements].sort((a, b) => a.zIndex - b.zIndex);
+
+  for (const placement of sortedPlacements) {
+    const product = args.productsById[placement.productId];
+    if (!product?.imageUrl) continue;
+
+    const productImage = await loadImage(product.imageUrl);
+    const drawWidth = productImage.width * placement.scale;
+    const drawHeight = productImage.height * placement.scale;
+
+    ctx.save();
+    ctx.translate(placement.positionX + drawWidth / 2, placement.positionY + drawHeight / 2);
+    ctx.rotate((placement.rotation * Math.PI) / 180);
+    ctx.drawImage(productImage, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight);
+    ctx.restore();
+  }
+
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (blob) resolve(blob);
+      else reject(new Error("Failed to create preview image."));
+    }, "image/png");
+  });
+}
+```
+
+Important frontend note: canvas export requires product/room image URLs to allow CORS. Cloudinary images usually work. Some third-party image URLs may block canvas export.
+
+AI provider order:
+
+```text
+OpenAI if OPENAI_API_KEY exists
+Gemini if GEMINI_API_KEY exists
+Mock fallback if both providers fail or are missing
+```
+
+If `JSON.parse(generated.aiAnalysisJson).mode === "openai"`, OpenAI generated the response successfully.
+
+If `JSON.parse(generated.aiAnalysisJson).mode === "gemini"`, Gemini generated the response successfully.
+
+Gemini setup:
+
+1. Open `https://aistudio.google.com/app/apikey`.
+2. Create an API key.
+3. Add it to `.env`:
+
+```env
+GEMINI_API_KEY=your_gemini_key_here
+```
+
+Optional `appsettings.json` section:
+
+```json
+"Gemini": {
+  "ApiKey": "",
+  "Model": "gemini-2.0-flash",
+  "ImageModel": "gemini-2.0-flash-preview-image-generation"
+}
+```
+
+Restart the API after changing `.env`.
+
 ### Chatbot Widget
 
 Call public config:
@@ -852,11 +1009,220 @@ Returns safe user context:
 }
 ```
 
+## AI Chat Assistant
+
+A fully custom, product-aware AI shopping assistant built on the existing `AIChat` /
+`AIMessage` tables (exposed here as "conversations" and "messages"). Every conversation is
+scoped to the authenticated user. Before calling the language model, the backend searches the
+product catalog for items relevant to the user's message (by budget and furniture/category
+keywords) and only allows the assistant to recommend products from that candidate set.
+
+### Endpoints
+
+| Feature | Method | Endpoint | Auth | Content Type |
+| --- | --- | --- | --- | --- |
+| Send a chat message | `POST` | `/api/chat/message` | Yes | JSON |
+| List conversations | `GET` | `/api/chat/conversations` | Yes | JSON |
+| Get conversation detail | `GET` | `/api/chat/conversations/{id}` | Yes | JSON |
+| Create empty conversation | `POST` | `/api/chat/conversations` | Yes | JSON |
+| Delete conversation | `DELETE` | `/api/chat/conversations/{id}` | Yes | JSON |
+
+`POST /api/chat/message` is rate-limited to 20 requests per minute per user (`429 Too Many
+Requests` once exceeded).
+
+### Send a Message
+
+```http
+POST /api/chat/message
+Authorization: Bearer ACCESS_TOKEN
+Content-Type: application/json
+
+{
+  "conversationId": null,
+  "message": "I need a sofa for a small apartment under $500"
+}
+```
+
+- `conversationId` is optional. Omit it (or send `null`) to start a new conversation — the
+  response returns the new `conversationId` so subsequent messages can reuse it.
+- `message` is required, max length 2000 characters.
+
+Returns `200 OK`:
+
+```json
+{
+  "conversationId": 12,
+  "message": "For a small apartment, I'd suggest our Compact Linen Loveseat — it's a two-seat sofa that fits tight spaces and comes in at $460.",
+  "recommendedProducts": [
+    {
+      "id": 5,
+      "name": "Compact Linen Loveseat",
+      "price": 460.00,
+      "imageUrl": "https://example.com/images/compact-linen-loveseat-main.jpg",
+      "category": "Living Room"
+    }
+  ],
+  "createdAt": "2026-06-13T10:15:00Z"
+}
+```
+
+If nothing in the catalog matches the request, `recommendedProducts` is an empty array and the
+assistant explains that nothing matches instead of inventing a product.
+
+### List Conversations
+
+```http
+GET /api/chat/conversations
+Authorization: Bearer ACCESS_TOKEN
+```
+
+Returns `200 OK`:
+
+```json
+[
+  {
+    "id": 12,
+    "title": "I need a sofa for a small apartment under $500",
+    "lastMessagePreview": "For a small apartment, I'd suggest our Compact Linen Loveseat...",
+    "createdAt": "2026-06-13T10:14:50Z",
+    "updatedAt": "2026-06-13T10:15:00Z"
+  }
+]
+```
+
+### Get Conversation Detail
+
+```http
+GET /api/chat/conversations/12
+Authorization: Bearer ACCESS_TOKEN
+```
+
+Returns `200 OK`:
+
+```json
+{
+  "id": 12,
+  "title": "I need a sofa for a small apartment under $500",
+  "createdAt": "2026-06-13T10:14:50Z",
+  "updatedAt": "2026-06-13T10:15:00Z",
+  "messages": [
+    {
+      "id": 30,
+      "role": "user",
+      "content": "I need a sofa for a small apartment under $500",
+      "recommendedProducts": [],
+      "createdAt": "2026-06-13T10:14:50Z"
+    },
+    {
+      "id": 31,
+      "role": "assistant",
+      "content": "For a small apartment, I'd suggest our Compact Linen Loveseat — it's a two-seat sofa that fits tight spaces and comes in at $460.",
+      "recommendedProducts": [
+        {
+          "id": 5,
+          "name": "Compact Linen Loveseat",
+          "price": 460.00,
+          "imageUrl": "https://example.com/images/compact-linen-loveseat-main.jpg",
+          "category": "Living Room"
+        }
+      ],
+      "createdAt": "2026-06-13T10:15:00Z"
+    }
+  ]
+}
+```
+
+Returns `404 Not Found` if the conversation doesn't exist or belongs to another user.
+
+### Create an Empty Conversation
+
+```http
+POST /api/chat/conversations
+Authorization: Bearer ACCESS_TOKEN
+Content-Type: application/json
+
+{
+  "title": "Bedroom refresh"
+}
+```
+
+`title` is optional (max length 200) and defaults to `"New conversation"`. Returns
+`201 Created`:
+
+```json
+{
+  "id": 13,
+  "title": "Bedroom refresh",
+  "lastMessagePreview": null,
+  "createdAt": "2026-06-13T10:20:00Z",
+  "updatedAt": null
+}
+```
+
+### Delete a Conversation
+
+```http
+DELETE /api/chat/conversations/13
+Authorization: Bearer ACCESS_TOKEN
+```
+
+Returns `204 No Content`. Returns `404 Not Found` if the conversation doesn't exist or belongs
+to another user.
+
+### Chat Widget
+
+Drop the floating chat widget onto any page:
+
+```html
+<link rel="stylesheet" href="/chat-widget.css">
+<script src="/chat-widget.js"></script>
+```
+
+The widget:
+
+- Reads `accessToken` from `localStorage` (same convention as the rest of the app). If it's
+  missing, the widget shows a "please sign in" message instead of the chat input.
+- Shows a conversation list (`GET /api/chat/conversations`) with a "New chat" button.
+- Lets the user reopen a past conversation (`GET /api/chat/conversations/{id}`), restoring both
+  messages and any recommended product cards.
+- Sends new messages via `POST /api/chat/message`, rendering the assistant's reply with an
+  optimistic user bubble, a typing indicator, and product cards for `recommendedProducts`.
+
+A ready-to-use demo page (with a dev login form) is available at `/chat-widget-demo.html`.
+
+### Setup
+
+1. Configure an OpenAI API key — either set `OpenAi:ApiKey` in `appsettings.json` /
+   environment, or add `OPENAI_API_KEY=...` to a local `.env` file in the project root.
+   `OpenAi:ChatModel` controls which model is used (defaults to `gpt-4o-mini`).
+2. Apply the database migration that adds `recommended_product_ids` to `ai_messages`:
+   ```bash
+   dotnet ef database update
+   ```
+3. If no API key is configured, `/api/chat/message` still returns `200 OK` with a
+   deterministic fallback reply (based on the matched catalog candidates), so the feature stays
+   testable end-to-end without a real key.
+
+### Security Notes
+
+- Every conversation read/write is scoped to the authenticated user (`404 Not Found` if you
+  don't own it).
+- The assistant can only recommend products that were included in the catalog context built
+  for the current message — the server intersects the model's `recommendedProductIds` with
+  that candidate set before returning them, so it cannot reference arbitrary product ids.
+- The system prompt instructs the model to treat catalog context and conversation history as
+  data, not instructions, and to ignore embedded attempts to change its behavior.
+- `message` is capped at 2000 characters, and `/api/chat/message` is rate-limited to 20
+  requests/minute per user.
+
 ## Static Test Pages
 
 ```text
 /ai-room-design.html
 /tawk-widget.js
+/chat-widget-demo.html
+/chat-widget.js
+/chat-widget.css
 ```
 
 ## Verified Local AI Test Flow

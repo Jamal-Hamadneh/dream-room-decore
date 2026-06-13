@@ -6,6 +6,7 @@ public class AIMessage
     public int AIChatId { get; set; }
     public string Role { get; set; } = string.Empty;
     public string Content { get; set; } = string.Empty;
+    public string? RecommendedProductIds { get; set; }
     public DateTime CreatedAt { get; set; }
 
     public AIChat AIChat { get; set; } = null!;

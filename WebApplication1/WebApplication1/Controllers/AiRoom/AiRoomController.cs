@@ -42,6 +42,12 @@ public class AiRoomController(IRoomAiService roomAiService) : ControllerBase
         return roomAiService.GenerateRealisticDesignAsync(GetCurrentUserId(), request, cancellationToken);
     }
 
+    [HttpPost("GenerateRealisticDesignFromPreview")]
+    public Task<GenerateRealisticDesignResponse> GenerateRealisticDesignFromPreview([FromForm] GenerateRealisticDesignFromPreviewRequest request, CancellationToken cancellationToken)
+    {
+        return roomAiService.GenerateRealisticDesignFromPreviewAsync(GetCurrentUserId(), request, cancellationToken);
+    }
+
     private int GetCurrentUserId()
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);

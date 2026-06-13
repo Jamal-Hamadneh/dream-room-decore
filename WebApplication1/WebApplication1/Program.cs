@@ -3,13 +3,17 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using System.Security.Claims;
 using System.Text;
+using System.Threading.RateLimiting;
 using WebApplication1.Contracts.Requests;
 using WebApplication1.Data;
 using WebApplication1.Models;
 using WebApplication1.Middleware;
 using WebApplication1.Options;
 using WebApplication1.Services;
+using WebApplication1.Services.Chat;
+using WebApplication1.Services.OpenAI;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -22,15 +26,38 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
 builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection("Jwt"));
 builder.Services.Configure<CloudinaryOptions>(builder.Configuration.GetSection("Cloudinary"));
 builder.Services.Configure<OpenAiOptions>(builder.Configuration.GetSection("OpenAi"));
+builder.Services.Configure<GeminiOptions>(builder.Configuration.GetSection("Gemini"));
 builder.Services.Configure<TawkOptions>(builder.Configuration.GetSection("Tawk"));
 builder.Services.AddScoped<PasswordHasher<User>>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<ICloudinaryService, CloudinaryService>();
 builder.Services.AddHttpClient<IOpenAiService, OpenAiService>();
+builder.Services.AddHttpClient<IRoomCompositionService, RoomCompositionService>();
 builder.Services.AddScoped<IRoomAiService, RoomAiService>();
 builder.Services.AddScoped<IChatbotContextService, ChatbotContextService>();
+builder.Services.AddScoped<IChatCompletionService, ChatCompletionService>();
+builder.Services.AddScoped<IProductRecommendationService, ProductRecommendationService>();
+builder.Services.AddScoped<IChatAssistantService, ChatAssistantService>();
 builder.Services.AddValidatorsFromAssemblyContaining<UserRequest>();
 builder.Services.AddCrudServices();
+
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+
+    options.AddPolicy("chat", httpContext =>
+    {
+        var partitionKey = httpContext.User.FindFirst(ClaimTypes.NameIdentifier)?.Value
+            ?? httpContext.Connection.RemoteIpAddress?.ToString()
+            ?? "anonymous";
+
+        return RateLimitPartition.GetFixedWindowLimiter(partitionKey, _ => new FixedWindowRateLimiterOptions
+        {
+            Window = TimeSpan.FromMinutes(1),
+            PermitLimit = 20
+        });
+    });
+});
 
 var jwtOptions = builder.Configuration.GetSection("Jwt").Get<JwtOptions>()!;
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -89,6 +116,7 @@ app.UseHttpsRedirection();
 app.UseStaticFiles();
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseRateLimiter();
 app.MapControllers();
 
 app.Run();

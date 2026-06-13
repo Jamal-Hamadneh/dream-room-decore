@@ -10,4 +10,5 @@ public interface IRoomAiService
     Task<PlacementResponse> UpdatePlacementAsync(int userId, UpdatePlacementRequest request, CancellationToken cancellationToken = default);
     Task<PlacementResponse> SwitchProductAsync(int userId, SwitchProductRequest request, CancellationToken cancellationToken = default);
     Task<GenerateRealisticDesignResponse> GenerateRealisticDesignAsync(int userId, GenerateRealisticDesignRequest request, CancellationToken cancellationToken = default);
+    Task<GenerateRealisticDesignResponse> GenerateRealisticDesignFromPreviewAsync(int userId, GenerateRealisticDesignFromPreviewRequest request, CancellationToken cancellationToken = default);
 }

@@ -33,6 +33,17 @@ public class CloudinaryService : ICloudinaryService
         return result.SecureUrl?.ToString() ?? string.Empty;
     }
 
+    public async Task<string> UploadImageStreamAsync(Stream imageStream, string fileName, string folder, CancellationToken cancellationToken = default)
+    {
+        var result = await _cloudinary.UploadAsync(new ImageUploadParams
+        {
+            File = new FileDescription(fileName, imageStream),
+            Folder = folder
+        }, cancellationToken);
+
+        return result.SecureUrl?.ToString() ?? string.Empty;
+    }
+
     public async Task<string> UploadImageFromUrlAsync(string imageUrl, string folder, CancellationToken cancellationToken = default)
     {
         var result = await _cloudinary.UploadAsync(new ImageUploadParams

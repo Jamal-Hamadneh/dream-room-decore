@@ -63,8 +63,10 @@ public static class DatabaseSeeder
         var livingRoom = new Category { Name = "Living Room", CreatedAt = now };
         var bedroom = new Category { Name = "Bedroom", CreatedAt = now };
         var lighting = new Category { Name = "Lighting", CreatedAt = now };
+        var office = new Category { Name = "Office", CreatedAt = now };
+        var storage = new Category { Name = "Storage", CreatedAt = now };
 
-        context.Categories.AddRange(livingRoom, bedroom, lighting);
+        context.Categories.AddRange(livingRoom, bedroom, lighting, office, storage);
         await context.SaveChangesAsync();
 
         var sofa = new Product
@@ -144,14 +146,74 @@ public static class DatabaseSeeder
             CreatedAt = now
         };
 
-        context.Products.AddRange(sofa, table, bed, lamp);
+        var loveseat = new Product
+        {
+            CategoryId = livingRoom.Id,
+            Name = "Compact Linen Loveseat",
+            Description = "Two-seat loveseat with slim arms, perfect for small apartments and studios.",
+            Price = 460m,
+            StockQuantity = 15,
+            Material = "Linen",
+            Color = "Light Gray",
+            Height = 80m,
+            Width = 145m,
+            Depth = 85m,
+            IsActive = true,
+            IsFeatured = true,
+            AverageRating = 4.6m,
+            ReviewsCount = 0,
+            CreatedAt = now
+        };
+
+        var desk = new Product
+        {
+            CategoryId = office.Id,
+            Name = "Scandinavian Study Desk",
+            Description = "Compact study desk with a single drawer, ideal for home offices and small rooms.",
+            Price = 210m,
+            StockQuantity = 18,
+            Material = "Wood",
+            Color = "Oak",
+            Height = 75m,
+            Width = 110m,
+            Depth = 55m,
+            IsActive = true,
+            IsFeatured = false,
+            AverageRating = 4.4m,
+            ReviewsCount = 0,
+            CreatedAt = now
+        };
+
+        var bookshelf = new Product
+        {
+            CategoryId = storage.Id,
+            Name = "Oak Ladder Bookshelf",
+            Description = "Five-tier leaning bookshelf with a slim footprint, great for living rooms and home offices.",
+            Price = 240m,
+            StockQuantity = 14,
+            Material = "Wood",
+            Color = "Oak",
+            Height = 180m,
+            Width = 70m,
+            Depth = 30m,
+            IsActive = true,
+            IsFeatured = true,
+            AverageRating = 4.5m,
+            ReviewsCount = 0,
+            CreatedAt = now
+        };
+
+        context.Products.AddRange(sofa, table, bed, lamp, loveseat, desk, bookshelf);
         await context.SaveChangesAsync();
 
         context.ProductImages.AddRange(
             new ProductImage { ProductId = sofa.Id, ImageUrl = "https://example.com/images/modern-beige-sofa-main.jpg", IsMain = true, CreatedAt = now },
             new ProductImage { ProductId = table.Id, ImageUrl = "https://example.com/images/walnut-coffee-table-main.jpg", IsMain = true, CreatedAt = now },
             new ProductImage { ProductId = bed.Id, ImageUrl = "https://example.com/images/queen-platform-bed-main.jpg", IsMain = true, CreatedAt = now },
-            new ProductImage { ProductId = lamp.Id, ImageUrl = "https://example.com/images/arc-floor-lamp-main.jpg", IsMain = true, CreatedAt = now });
+            new ProductImage { ProductId = lamp.Id, ImageUrl = "https://example.com/images/arc-floor-lamp-main.jpg", IsMain = true, CreatedAt = now },
+            new ProductImage { ProductId = loveseat.Id, ImageUrl = "https://example.com/images/compact-linen-loveseat-main.jpg", IsMain = true, CreatedAt = now },
+            new ProductImage { ProductId = desk.Id, ImageUrl = "https://example.com/images/scandinavian-study-desk-main.jpg", IsMain = true, CreatedAt = now },
+            new ProductImage { ProductId = bookshelf.Id, ImageUrl = "https://example.com/images/oak-ladder-bookshelf-main.jpg", IsMain = true, CreatedAt = now });
 
         var beigeSofaVariant = new ProductVariant
         {

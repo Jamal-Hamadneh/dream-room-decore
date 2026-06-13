@@ -3,6 +3,7 @@ namespace WebApplication1.Services;
 public class RoomAiPromptData
 {
     public string RoomImageUrl { get; set; } = string.Empty;
+    public string? PreviewImageUrl { get; set; }
     public string RoomType { get; set; } = string.Empty;
     public decimal Height { get; set; }
     public decimal Width { get; set; }
