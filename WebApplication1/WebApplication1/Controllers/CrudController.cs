@@ -13,7 +13,7 @@ public abstract class CrudController<TRequest, TResponse>(
     IValidator<TRequest> validator) : ControllerBase
 {
     [HttpGet]
-    public async Task<ActionResult<List<TResponse>>> GetAll(CancellationToken cancellationToken)
+    public virtual async Task<ActionResult<List<TResponse>>> GetAll([FromQuery] int? page, [FromQuery] int? limit, [FromQuery] string? sort, CancellationToken cancellationToken)
     {
         return Ok(await service.GetAllAsync(cancellationToken));
     }

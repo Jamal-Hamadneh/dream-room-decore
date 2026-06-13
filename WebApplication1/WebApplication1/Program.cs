@@ -32,7 +32,7 @@ builder.Services.Configure<StripeOptions>(builder.Configuration.GetSection("Stri
 builder.Services.AddScoped<PasswordHasher<User>>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<ICloudinaryService, CloudinaryService>();
-builder.Services.AddHttpClient<IOpenAiService, OpenAiService>();
+builder.Services.AddHttpClient<IOpenAiService, OpenAiService>(client => client.Timeout = TimeSpan.FromMinutes(3));
 builder.Services.AddHttpClient<IRoomCompositionService, RoomCompositionService>();
 builder.Services.AddScoped<IRoomAiService, RoomAiService>();
 builder.Services.AddScoped<IChatbotContextService, ChatbotContextService>();
@@ -40,6 +40,7 @@ builder.Services.AddScoped<IStripePaymentService, StripePaymentService>();
 builder.Services.AddScoped<IChatCompletionService, ChatCompletionService>();
 builder.Services.AddScoped<IProductRecommendationService, ProductRecommendationService>();
 builder.Services.AddScoped<IChatAssistantService, ChatAssistantService>();
+builder.Services.AddScoped<IStatsService, StatsService>();
 builder.Services.AddValidatorsFromAssemblyContaining<UserRequest>();
 builder.Services.AddCrudServices();
 

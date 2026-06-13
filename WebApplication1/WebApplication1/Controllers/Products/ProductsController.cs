@@ -7,4 +7,11 @@ using WebApplication1.Services;
 namespace WebApplication1.Controllers;
 
 [Route("api/products")]
-public class ProductsController(IProductService service, IValidator<ProductRequest> validator) : CrudController<ProductRequest, ProductResponse>(service, validator);
+public class ProductsController(IProductService service, IValidator<ProductRequest> validator) : CrudController<ProductRequest, ProductResponse>(service, validator)
+{
+    [HttpGet("top")]
+    public Task<List<TopProductResponse>> GetTop([FromQuery] int? limit, CancellationToken cancellationToken)
+    {
+        return service.GetTopProductsAsync(limit ?? 4, cancellationToken);
+    }
+}

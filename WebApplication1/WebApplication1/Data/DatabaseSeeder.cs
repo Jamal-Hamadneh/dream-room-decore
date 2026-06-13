@@ -211,9 +211,9 @@ public static class DatabaseSeeder
             new ProductImage { ProductId = table.Id, ImageUrl = "https://example.com/images/walnut-coffee-table-main.jpg", IsMain = true, CreatedAt = now },
             new ProductImage { ProductId = bed.Id, ImageUrl = "https://example.com/images/queen-platform-bed-main.jpg", IsMain = true, CreatedAt = now },
             new ProductImage { ProductId = lamp.Id, ImageUrl = "https://example.com/images/arc-floor-lamp-main.jpg", IsMain = true, CreatedAt = now },
-            new ProductImage { ProductId = loveseat.Id, ImageUrl = "https://example.com/images/compact-linen-loveseat-main.jpg", IsMain = true, CreatedAt = now },
-            new ProductImage { ProductId = desk.Id, ImageUrl = "https://example.com/images/scandinavian-study-desk-main.jpg", IsMain = true, CreatedAt = now },
-            new ProductImage { ProductId = bookshelf.Id, ImageUrl = "https://example.com/images/oak-ladder-bookshelf-main.jpg", IsMain = true, CreatedAt = now });
+            new ProductImage { ProductId = loveseat.Id, ImageUrl = "https://res.cloudinary.com/duruqfguc/image/upload/v1781379885/furniture/products/compact-linen-loveseat-cutout.png", IsMain = true, CreatedAt = now },
+            new ProductImage { ProductId = desk.Id, ImageUrl = "https://res.cloudinary.com/duruqfguc/image/upload/v1781379886/furniture/products/scandinavian-study-desk-cutout.png", IsMain = true, CreatedAt = now },
+            new ProductImage { ProductId = bookshelf.Id, ImageUrl = "https://res.cloudinary.com/duruqfguc/image/upload/v1781379887/furniture/products/oak-ladder-bookshelf-cutout.png", IsMain = true, CreatedAt = now });
 
         var beigeSofaVariant = new ProductVariant
         {

@@ -288,10 +288,10 @@ type PlacementResponse = {
   id: number;
   roomDesignId: number;
   productId: number;
-  positionX: number;
-  positionY: number;
-  rotation: number;
-  scale: number;
+  positionX: number; // 0..1 fraction of canvas width, at the item's center
+  positionY: number; // 0..1 fraction of canvas height, at the item's center
+  rotation: number;  // degrees, clockwise
+  scale: number;     // 1.0 = 25% of canvas width
   zIndex: number;
 };
 
@@ -619,8 +619,15 @@ async function createRoomPreviewBlob(args: {
   const ctx = canvas.getContext("2d");
   if (!ctx) throw new Error("Canvas is not supported.");
 
+  // Must match the server: a scale-1 item spans 25% of the canvas width.
+  const BASE_FRACTION = 0.25;
+
+  // Draw the room to fill the canvas (cover/center), matching the server crop.
   const room = await loadImage(args.roomImageUrl);
-  ctx.drawImage(room, 0, 0, args.width, args.height);
+  const coverScale = Math.max(args.width / room.width, args.height / room.height);
+  const roomW = room.width * coverScale;
+  const roomH = room.height * coverScale;
+  ctx.drawImage(room, (args.width - roomW) / 2, (args.height - roomH) / 2, roomW, roomH);
 
   const sortedPlacements = [...args.placements].sort((a, b) => a.zIndex - b.zIndex);
 
@@ -629,11 +636,14 @@ async function createRoomPreviewBlob(args: {
     if (!product?.imageUrl) continue;
 
     const productImage = await loadImage(product.imageUrl);
-    const drawWidth = productImage.width * placement.scale;
-    const drawHeight = productImage.height * placement.scale;
+    // positionX/Y are 0..1 fractions of the canvas, measured to the item's center.
+    const centerX = placement.positionX * args.width;
+    const centerY = placement.positionY * args.height;
+    const drawWidth = args.width * BASE_FRACTION * placement.scale;
+    const drawHeight = productImage.height * (drawWidth / productImage.width);
 
     ctx.save();
-    ctx.translate(placement.positionX + drawWidth / 2, placement.positionY + drawHeight / 2);
+    ctx.translate(centerX, centerY);
     ctx.rotate((placement.rotation * Math.PI) / 180);
     ctx.drawImage(productImage, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight);
     ctx.restore();
@@ -993,6 +1003,8 @@ Returns:
 
 Creates or updates placement for the same `roomDesignId` and `productId`.
 
+**Coordinate system (important):** `positionX` / `positionY` are normalized **0.0–1.0 fractions of the room canvas**, measured to the **center** of the furniture (`0,0` = top-left, `0.5,0.5` = dead center, `1,1` = bottom-right). `scale` is a multiplier where `1.0` makes the item span **25% of the canvas width** (`BASE_FURNITURE_FRACTION = 0.25`); its height follows the product image's aspect ratio. `rotation` is in degrees (clockwise, around the item's center). Using fractions instead of pixels keeps your on-screen preview and the generated image aligned at any display size. The server composes on a 3:2 (1536×1024) canvas and crops the room photo to fill (`cover`, centered) — use a 3:2 preview canvas to match.
+
 ```http
 POST /AiRoom/SavePlacement
 Authorization: Bearer ACCESS_TOKEN
@@ -1003,8 +1015,8 @@ Content-Type: application/json
 {
   "roomDesignId": 1,
   "productId": 1,
-  "positionX": 120,
-  "positionY": 300,
+  "positionX": 0.35,
+  "positionY": 0.72,
   "rotation": 0,
   "scale": 1.2,
   "zIndex": 2
@@ -1022,8 +1034,8 @@ Content-Type: application/json
 ```json
 {
   "placementId": 1,
-  "positionX": 140,
-  "positionY": 320,
+  "positionX": 0.40,
+  "positionY": 0.75,
   "rotation": 10,
   "scale": 1.1,
   "zIndex": 3
@@ -1049,6 +1061,8 @@ Content-Type: application/json
 ```
 
 ### Generate Realistic AI Design
+
+Composes your placed cart products onto the room photo, then re-renders the result as a **photorealistic interior photo** using `gpt-image-1`. Your real product photos and exact placements are preserved (no invented furniture) — only lighting, shadows, grounding and perspective are added. This call can take **~30–90 seconds**. If no image API key is configured, or the render fails, it gracefully falls back to the deterministic composite, so the endpoint always returns `200` with a usable `generatedImageUrl`.
 
 ```http
 POST /AiRoom/GenerateRealisticDesign
@@ -1397,8 +1411,8 @@ Request:
 {
   "roomDesignId": 1,
   "productId": 1,
-  "positionX": 120,
-  "positionY": 300,
+  "positionX": 0.35,
+  "positionY": 0.72,
   "rotation": 0,
   "scale": 1.2,
   "zIndex": 2
@@ -1412,8 +1426,8 @@ Response:
   "id": 1,
   "roomDesignId": 1,
   "productId": 1,
-  "positionX": 120,
-  "positionY": 300,
+  "positionX": 0.35,
+  "positionY": 0.72,
   "rotation": 0,
   "scale": 1.2,
   "zIndex": 2
@@ -1439,8 +1453,8 @@ Response:
   "id": 1,
   "roomDesignId": 1,
   "productId": 2,
-  "positionX": 120,
-  "positionY": 300,
+  "positionX": 0.35,
+  "positionY": 0.72,
   "rotation": 0,
   "scale": 1.2,
   "zIndex": 2
@@ -1454,8 +1468,8 @@ Request:
 ```json
 {
   "placementId": 1,
-  "positionX": 140,
-  "positionY": 320,
+  "positionX": 0.40,
+  "positionY": 0.75,
   "rotation": 10,
   "scale": 1.1,
   "zIndex": 3
@@ -1469,8 +1483,8 @@ Response:
   "id": 1,
   "roomDesignId": 1,
   "productId": 2,
-  "positionX": 140,
-  "positionY": 320,
+  "positionX": 0.40,
+  "positionY": 0.75,
   "rotation": 10,
   "scale": 1.1,
   "zIndex": 3

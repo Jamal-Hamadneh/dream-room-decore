@@ -12,8 +12,8 @@
         input, select, button { padding: 8px; border: 1px solid #ccc; border-radius: 6px; }
         button { background: #111; color: white; cursor: pointer; }
         button:disabled { opacity: .5; cursor: not-allowed; }
-        #canvas { position: relative; width: 100%; max-width: 1000px; min-height: 560px; background-size: contain; background-repeat: no-repeat; background-position: center; border: 1px solid #ddd; overflow: hidden; }
-        .furniture { position: absolute; width: 120px; cursor: move; transform-origin: center; user-select: none; }
+        #canvas { position: relative; width: 100%; max-width: 900px; aspect-ratio: 3 / 2; background-size: cover; background-repeat: no-repeat; background-position: center; border: 1px solid #ddd; overflow: hidden; }
+        .furniture { position: absolute; height: auto; cursor: move; transform-origin: center; user-select: none; }
         .selected { outline: 2px solid #2563eb; }
         #products img { width: 80px; height: 80px; object-fit: contain; border: 1px solid #ddd; border-radius: 8px; padding: 4px; background: white; cursor: pointer; }
         #generatedImage { max-width: 100%; border-radius: 10px; display: none; }
@@ -79,6 +79,11 @@ let roomDesignId = 0;
 let products = [];
 let selected = null;
 
+// Must match RoomCompositionService.BaseFurnitureFraction so a furniture item occupies the
+// same fraction of the canvas here as it does in the generated image.
+const BASE_FRACTION = 0.25;
+function canvasEl() { return document.getElementById('canvas'); }
+
 document.getElementById('token').value = localStorage.getItem('jwt') || '';
 
 function saveToken() {
@@ -139,15 +144,33 @@ function addFurniture(product) {
     img.dataset.scale = '1';
     img.dataset.rotation = '0';
     img.dataset.zIndex = '1';
-    img.style.left = '120px';
-    img.style.top = '120px';
-    img.style.zIndex = '1';
+    img.dataset.cx = '0.5';
+    img.dataset.cy = '0.5';
     img.onclick = () => selectFurniture(img);
+    img.onload = () => layout(img);
     makeDraggable(img);
-    document.getElementById('canvas').appendChild(img);
+    canvasEl().appendChild(img);
+    layout(img);
     selectFurniture(img);
     savePlacement(img);
 }
+
+// Positions and sizes a furniture element from its normalized center (cx, cy in 0..1) and
+// scale, so the on-screen preview matches the server-side composite/generated image exactly.
+function layout(el) {
+    const cw = canvasEl().clientWidth;
+    const ch = canvasEl().clientHeight;
+    const scale = parseFloat(el.dataset.scale) || 1;
+    el.style.width = (cw * BASE_FRACTION * scale) + 'px';
+    el.style.transform = 'rotate(' + (parseFloat(el.dataset.rotation) || 0) + 'deg)';
+    el.style.zIndex = el.dataset.zIndex || '1';
+    const cx = parseFloat(el.dataset.cx);
+    const cy = parseFloat(el.dataset.cy);
+    el.style.left = (cx * cw - el.offsetWidth / 2) + 'px';
+    el.style.top = (cy * ch - el.offsetHeight / 2) + 'px';
+}
+
+window.addEventListener('resize', () => document.querySelectorAll('.furniture').forEach(layout));
 
 function selectFurniture(element) {
     document.querySelectorAll('.furniture').forEach(x => x.classList.remove('selected'));
@@ -171,6 +194,10 @@ function makeDraggable(element) {
         document.onmouseup = () => {
             document.onmousemove = null;
             document.onmouseup = null;
+            const cw = canvasEl().clientWidth;
+            const ch = canvasEl().clientHeight;
+            element.dataset.cx = ((element.offsetLeft + element.offsetWidth / 2) / cw).toString();
+            element.dataset.cy = ((element.offsetTop + element.offsetHeight / 2) / ch).toString();
             savePlacement(element);
         };
     };
@@ -181,8 +208,7 @@ function applyTransform() {
     selected.dataset.scale = document.getElementById('scale').value;
     selected.dataset.rotation = document.getElementById('rotation').value;
     selected.dataset.zIndex = document.getElementById('zIndex').value;
-    selected.style.zIndex = selected.dataset.zIndex;
-    selected.style.transform = `scale(${selected.dataset.scale}) rotate(${selected.dataset.rotation}deg)`;
+    layout(selected);
     savePlacement(selected);
 }
 
@@ -191,8 +217,8 @@ async function savePlacement(element) {
     const body = {
         roomDesignId,
         productId: Number(element.dataset.productId),
-        positionX: parseFloat(element.style.left) || 0,
-        positionY: parseFloat(element.style.top) || 0,
+        positionX: parseFloat(element.dataset.cx) || 0,
+        positionY: parseFloat(element.dataset.cy) || 0,
         rotation: Number(element.dataset.rotation),
         scale: Number(element.dataset.scale),
         zIndex: Number(element.dataset.zIndex)
@@ -213,11 +239,12 @@ async function switchProduct() {
     if (!res.ok) return alert(await res.text());
     selected.dataset.productId = newProductId;
     selected.src = product.imageUrl || '';
+    layout(selected);
 }
 
 async function generateDesign() {
     document.getElementById('generateButton').disabled = true;
-    document.getElementById('status').textContent = 'Generating...';
+    document.getElementById('status').textContent = 'Generating a photorealistic render... this can take up to a minute.';
     const res = await fetch('/AiRoom/GenerateRealisticDesign', {
         method: 'POST',
         headers: { ...authHeaders(), 'Content-Type': 'application/json' },

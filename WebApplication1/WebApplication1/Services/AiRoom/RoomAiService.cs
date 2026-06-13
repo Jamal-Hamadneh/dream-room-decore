@@ -127,32 +127,52 @@ public class RoomAiService(
         var roomDesign = await GetRoomDesignForGenerationAsync(request.RoomDesignId, cancellationToken);
         var promptData = await BuildPromptDataAsync(userId, roomDesign, cancellationToken);
 
-        var previewImageBytes = await roomCompositionService.ComposeRoomPreviewAsync(promptData, cancellationToken);
+        var composedImageBytes = await roomCompositionService.ComposeRoomImageAsync(promptData, cancellationToken);
 
-        await using var uploadStream = new MemoryStream(previewImageBytes);
-        var previewImageUrl = await cloudinaryService.UploadImageStreamAsync(uploadStream, "preview.png", "furniture/previews", cancellationToken);
-        promptData.PreviewImageUrl = previewImageUrl;
+        // The deterministic composite already has the real cart products at the user's exact
+        // placements; gpt-image-1 then re-renders it photorealistically while preserving them.
+        // If the image API is unavailable, fall back to the composite so the flow never breaks.
+        var realisticImageBytes = await openAiService.GenerateRealisticRoomImageAsync(composedImageBytes, promptData, cancellationToken);
+        var finalImageBytes = realisticImageBytes ?? composedImageBytes;
 
-        var prompt = BuildPreviewPrompt(promptData);
-        await using var editStream = new MemoryStream(previewImageBytes);
-        var aiResult = await openAiService.GenerateRealisticRoomFromPreviewAsync(prompt, promptData, editStream, "image/png", "preview.png", cancellationToken);
+        await using var uploadStream = new MemoryStream(finalImageBytes);
+        var generatedImageUrl = await cloudinaryService.UploadImageStreamAsync(uploadStream, "room.png", "furniture/generated", cancellationToken);
+        promptData.PreviewImageUrl = generatedImageUrl;
 
-        return await SaveGeneratedImageAsync(roomDesign, prompt, aiResult, cancellationToken);
+        var prompt = BuildAnalysisPrompt(promptData);
+        var aiResult = await openAiService.AnalyzeRoomDesignAsync(prompt, promptData, cancellationToken);
+
+        return await SaveGeneratedImageAsync(roomDesign, generatedImageUrl, prompt, aiResult.AnalysisJson, cancellationToken);
     }
 
     public async Task<GenerateRealisticDesignResponse> GenerateRealisticDesignFromPreviewAsync(int userId, GenerateRealisticDesignFromPreviewRequest request, CancellationToken cancellationToken = default)
     {
         await EnsureRoomDesignBelongsToUserAsync(userId, request.RoomDesignId, cancellationToken);
         var roomDesign = await GetRoomDesignForGenerationAsync(request.RoomDesignId, cancellationToken);
-        var previewImageUrl = await cloudinaryService.UploadImageAsync(request.PreviewImage, "furniture/previews", cancellationToken);
         var promptData = await BuildPromptDataAsync(userId, roomDesign, cancellationToken);
-        promptData.PreviewImageUrl = previewImageUrl;
-        var prompt = BuildPreviewPrompt(promptData);
 
-        await using var previewStream = request.PreviewImage.OpenReadStream();
-        var aiResult = await openAiService.GenerateRealisticRoomFromPreviewAsync(prompt, promptData, previewStream, request.PreviewImage.ContentType, request.PreviewImage.FileName, cancellationToken);
+        // The frontend already composed the products onto the room. Run that composite through
+        // gpt-image-1 for photorealism, falling back to the uploaded preview as-is if unavailable.
+        var previewBytes = await ReadFormFileAsync(request.PreviewImage, cancellationToken);
+        var realisticImageBytes = await openAiService.GenerateRealisticRoomImageAsync(previewBytes, promptData, cancellationToken);
 
-        return await SaveGeneratedImageAsync(roomDesign, prompt, aiResult, cancellationToken);
+        string generatedImageUrl;
+        if (realisticImageBytes is not null)
+        {
+            await using var uploadStream = new MemoryStream(realisticImageBytes);
+            generatedImageUrl = await cloudinaryService.UploadImageStreamAsync(uploadStream, "room.png", "furniture/generated", cancellationToken);
+        }
+        else
+        {
+            generatedImageUrl = await cloudinaryService.UploadImageAsync(request.PreviewImage, "furniture/generated", cancellationToken);
+        }
+
+        promptData.PreviewImageUrl = generatedImageUrl;
+        var prompt = BuildAnalysisPrompt(promptData);
+
+        var aiResult = await openAiService.AnalyzeRoomDesignAsync(prompt, promptData, cancellationToken);
+
+        return await SaveGeneratedImageAsync(roomDesign, generatedImageUrl, prompt, aiResult.AnalysisJson, cancellationToken);
     }
 
     private async Task<RoomDesign> GetRoomDesignForGenerationAsync(int roomDesignId, CancellationToken cancellationToken)
@@ -200,20 +220,16 @@ public class RoomAiService(
         };
     }
 
-    private async Task<GenerateRealisticDesignResponse> SaveGeneratedImageAsync(RoomDesign roomDesign, string prompt, OpenAiRoomResult aiResult, CancellationToken cancellationToken)
+    private async Task<GenerateRealisticDesignResponse> SaveGeneratedImageAsync(RoomDesign roomDesign, string generatedImageUrl, string prompt, string analysisJson, CancellationToken cancellationToken)
     {
-        var generatedUrl = !string.IsNullOrWhiteSpace(aiResult.GeneratedImageDataUri)
-            ? await cloudinaryService.UploadImageDataUriAsync(aiResult.GeneratedImageDataUri, "furniture/generated", cancellationToken)
-            : await cloudinaryService.UploadImageFromUrlAsync(aiResult.GeneratedImageSourceUrl, "furniture/generated", cancellationToken);
-
-        roomDesign.RoomUpload.AiDescription = aiResult.AnalysisJson;
+        roomDesign.RoomUpload.AiDescription = analysisJson;
 
         var generatedRoomImage = new GeneratedRoomImage
         {
             RoomDesignId = roomDesign.Id,
-            GeneratedImageUrl = generatedUrl,
+            GeneratedImageUrl = generatedImageUrl,
             Prompt = prompt,
-            AiAnalysisJson = aiResult.AnalysisJson,
+            AiAnalysisJson = analysisJson,
             Status = "completed",
             CreatedAt = DateTime.UtcNow
         };
@@ -224,8 +240,8 @@ public class RoomAiService(
         return new GenerateRealisticDesignResponse
         {
             GeneratedRoomImageId = generatedRoomImage.Id,
-            GeneratedImageUrl = generatedUrl,
-            AiAnalysisJson = aiResult.AnalysisJson
+            GeneratedImageUrl = generatedImageUrl,
+            AiAnalysisJson = analysisJson
         };
     }
 
@@ -304,26 +320,24 @@ public class RoomAiService(
         };
     }
 
-    private static string BuildPreviewPrompt(RoomAiPromptData data)
+    private static async Task<byte[]> ReadFormFileAsync(IFormFile file, CancellationToken cancellationToken)
+    {
+        await using var stream = new MemoryStream();
+        await file.CopyToAsync(stream, cancellationToken);
+        return stream.ToArray();
+    }
+
+    private static string BuildAnalysisPrompt(RoomAiPromptData data)
     {
         var productLines = data.Products.Select(product =>
-            $"- {product.Name}: current color {product.Color}, material {product.Material}, product image {product.ImageUrl}, zIndex {product.ZIndex}");
-        var productNames = string.Join(", ", data.Products.Select(product => product.Name));
+            $"- {product.Name}: color {product.Color}, material {product.Material}, zIndex {product.ZIndex}");
 
-        return "Use the provided composed preview image as the exact layout reference and as the exact visual reference for every product. " +
-               "Keep every visible product on the same side, in the same approximate position, scale, rotation, and layer order as the preview. " +
-               "Do not move furniture to another side of the room. " +
-               "Preserve the exact color, material, texture, and shape of every product exactly as shown in the preview image - do not recolor, restyle, or redesign any product. " +
-               "Preserve the room's wall color, floor, lighting style, and camera angle exactly as shown in the preview image. " +
-               "The only allowed change is to make the pasted product photos blend naturally into the room (correct perspective, add realistic shadows and reflections, smooth edges) without altering their colors or materials. " +
-               $"Allowed products only: {productNames}. Exact product count: {data.Products.Count}. " +
-               "Do not add any product or decor that is not visible in the preview. Do not add plants, rugs, shelves, wall art, chairs, tables, lamps, pillows, books, or accessories unless they are one of the allowed products listed below. " +
-               "If an area is empty in the preview, keep it empty. Do not change the room structure. " +
-               "In the JSON analysis, include colorRecommendations with palette, productColorAdvice, wallColorAdvice, and whyTheseColorsWork.\n\n" +
-               $"Original room image: {data.RoomImageUrl}\n" +
-               $"Composed preview image: {data.PreviewImageUrl}\n" +
-               $"Room type: {data.RoomType}\n" +
-               $"User dimensions: width={data.Width}, height={data.Height}, depth={data.Depth}.\n\n" +
-               "Allowed products:\n" + string.Join("\n", productLines);
+        return "Analyze the provided room design image, which shows a room with the listed furniture placed in it exactly as the user arranged it. " +
+               "Return compact JSON with roomType, roomLayout, wallColor, floorType, lighting, approximateWidth, approximateHeight, approximateDepth, exactProductsUsed, extraProductsAdded, colorRecommendations. " +
+               "exactProductsUsed must list only the furniture below, and extraProductsAdded must be an empty array. " +
+               "colorRecommendations must include palette, productColorAdvice, wallColorAdvice, and whyTheseColorsWork - give practical suggestions for color and style combinations that would suit this room and the furniture already placed in it. " +
+               $"Room type: {data.RoomType}. Treat dimensions as approximate: width={data.Width}, height={data.Height}, depth={data.Depth}.\n\n" +
+               $"Room design image: {data.PreviewImageUrl}\n\n" +
+               "Furniture placed in the room:\n" + string.Join("\n", productLines);
     }
 }

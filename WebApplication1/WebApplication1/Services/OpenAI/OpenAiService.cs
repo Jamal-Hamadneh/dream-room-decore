@@ -14,7 +14,7 @@ public class OpenAiService(HttpClient httpClient, IOptions<OpenAiOptions> option
     private readonly string _apiKey = FirstValue(options.Value.ApiKey, LoadLocalEnv(Path.Combine(environment.ContentRootPath, ".env")), "OPENAI_API_KEY");
     private readonly string _geminiApiKey = FirstValue(geminiOptions.Value.ApiKey, LoadLocalEnv(Path.Combine(environment.ContentRootPath, ".env")), "GEMINI_API_KEY");
 
-    public async Task<OpenAiRoomResult> GenerateRealisticRoomFromPreviewAsync(string prompt, RoomAiPromptData data, Stream previewImageStream, string previewImageContentType, string previewImageFileName, CancellationToken cancellationToken = default)
+    public async Task<OpenAiRoomResult> AnalyzeRoomDesignAsync(string prompt, RoomAiPromptData data, CancellationToken cancellationToken = default)
     {
         if (!string.IsNullOrWhiteSpace(_apiKey))
         {
@@ -23,14 +23,7 @@ public class OpenAiService(HttpClient httpClient, IOptions<OpenAiOptions> option
             try
             {
                 var analysisJson = await AnalyzeRoomAsync(prompt, data, cancellationToken);
-                var generatedImageDataUri = await GenerateImageEditAsync(prompt, previewImageStream, previewImageContentType, previewImageFileName, cancellationToken);
-
-                return new OpenAiRoomResult
-                {
-                    AnalysisJson = EnsureMode(analysisJson, "openai-preview"),
-                    GeneratedImageSourceUrl = data.PreviewImageUrl ?? data.RoomImageUrl,
-                    GeneratedImageDataUri = generatedImageDataUri
-                };
+                return new OpenAiRoomResult { AnalysisJson = EnsureMode(analysisJson, "openai-analysis") };
             }
             catch (OperationCanceledException)
             {
@@ -38,15 +31,18 @@ public class OpenAiService(HttpClient httpClient, IOptions<OpenAiOptions> option
             }
             catch (Exception exception)
             {
-                logger.LogWarning(exception, "OpenAI preview image generation failed. Trying Gemini provider next.");
+                logger.LogWarning(exception, "OpenAI room analysis failed. Trying Gemini provider next.");
             }
         }
 
         if (!string.IsNullOrWhiteSpace(_geminiApiKey))
         {
+            httpClient.DefaultRequestHeaders.Authorization = null;
+
             try
             {
-                return await GenerateRealisticRoomWithGeminiAsync(prompt, data, cancellationToken);
+                var analysisJson = await AnalyzeRoomWithGeminiAsync(prompt, data, cancellationToken);
+                return new OpenAiRoomResult { AnalysisJson = EnsureMode(analysisJson, "gemini-analysis") };
             }
             catch (OperationCanceledException)
             {
@@ -54,26 +50,87 @@ public class OpenAiService(HttpClient httpClient, IOptions<OpenAiOptions> option
             }
             catch (Exception exception)
             {
-                logger.LogWarning(exception, "Gemini room generation failed. Using preview/mock fallback.");
+                logger.LogWarning(exception, "Gemini room analysis failed. Using mock fallback.");
             }
         }
 
         return CreateFallbackResult(data);
     }
 
-    private async Task<OpenAiRoomResult> GenerateRealisticRoomWithGeminiAsync(string prompt, RoomAiPromptData data, CancellationToken cancellationToken)
+    public async Task<byte[]?> GenerateRealisticRoomImageAsync(byte[] compositeImage, RoomAiPromptData data, CancellationToken cancellationToken = default)
     {
-        httpClient.DefaultRequestHeaders.Authorization = null;
-
-        var analysisJson = await AnalyzeRoomWithGeminiAsync(prompt, data, cancellationToken);
-        var generatedImageDataUri = await GenerateImageWithGeminiAsync(prompt, data, cancellationToken);
-
-        return new OpenAiRoomResult
+        if (string.IsNullOrWhiteSpace(_apiKey))
         {
-            AnalysisJson = EnsureMode(analysisJson, "gemini"),
-            GeneratedImageSourceUrl = data.RoomImageUrl,
-            GeneratedImageDataUri = generatedImageDataUri
-        };
+            return null;
+        }
+
+        try
+        {
+            using var form = new MultipartFormDataContent();
+
+            var imageContent = new ByteArrayContent(compositeImage);
+            imageContent.Headers.ContentType = new MediaTypeHeaderValue("image/png");
+            form.Add(imageContent, "image", "room.png");
+            form.Add(new StringContent(_options.ImageModel), "model");
+            form.Add(new StringContent("1536x1024"), "size");
+            form.Add(new StringContent("high"), "quality");
+            form.Add(new StringContent("high"), "input_fidelity");
+            form.Add(new StringContent(BuildRenderPrompt(data)), "prompt");
+
+            using var request = new HttpRequestMessage(HttpMethod.Post, "https://api.openai.com/v1/images/edits")
+            {
+                Content = form
+            };
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _apiKey);
+
+            using var response = await httpClient.SendAsync(request, cancellationToken);
+            var body = await response.Content.ReadAsStringAsync(cancellationToken);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                logger.LogWarning("gpt-image-1 room render failed ({StatusCode}): {Body}", (int)response.StatusCode, body);
+                return null;
+            }
+
+            using var document = JsonDocument.Parse(body);
+            var base64 = document.RootElement.GetProperty("data")[0].GetProperty("b64_json").GetString();
+            return string.IsNullOrWhiteSpace(base64) ? null : Convert.FromBase64String(base64);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            logger.LogWarning(exception, "gpt-image-1 room render failed.");
+            return null;
+        }
+    }
+
+    // Instructs gpt-image-1 to keep the real products and their placement untouched and only add
+    // photorealistic lighting, shadows and perspective, so the result still shows the exact items
+    // the customer placed (and that sit in their cart) rather than invented furniture.
+    private static string BuildRenderPrompt(RoomAiPromptData data)
+    {
+        var productList = data.Products.Count == 0
+            ? "the furniture shown"
+            : string.Join(", ", data.Products.Select(product =>
+            {
+                var descriptors = new[] { product.Color, product.Material, product.Name }
+                    .Where(value => !string.IsNullOrWhiteSpace(value));
+                return string.Join(" ", descriptors);
+            }));
+
+        return
+            "You are a professional interior-photography compositor. The provided image is a rough composite of a real room " +
+            "with real furniture products placed into it. Re-render it as one cohesive, photorealistic interior photograph.\n\n" +
+            "STRICT RULES:\n" +
+            "- Keep every furniture item in the EXACT same position, size, scale and orientation as in the provided image.\n" +
+            "- Preserve each product's exact shape, design, color, material and proportions. Do NOT redesign, recolor, swap, add or remove any furniture.\n" +
+            "- Keep the room's walls, floor, windows and architecture unchanged.\n" +
+            "- Only improve realism: integrate the furniture with correct perspective and grounding, consistent global lighting, " +
+            "soft realistic contact shadows on the floor, and matching color temperature, so the items look genuinely photographed in the room instead of pasted.\n\n" +
+            $"The furniture in the scene: {productList}.";
     }
 
     private async Task<string> AnalyzeRoomWithGeminiAsync(string prompt, RoomAiPromptData data, CancellationToken cancellationToken)
@@ -90,7 +147,7 @@ public class OpenAiService(HttpClient httpClient, IOptions<OpenAiOptions> option
                         {
                                    text = "Return compact JSON only with roomType, roomLayout, wallColor, floorType, lighting, approximateWidth, approximateHeight, approximateDepth, exactProductsUsed, extraProductsAdded, colorRecommendations. " +
                                           "colorRecommendations must include palette, productColorAdvice, wallColorAdvice, and whyTheseColorsWork. " +
-                                   "Use this uploaded room image URL as visual reference: " + data.RoomImageUrl + "\n\n" +
+                                   "Use this room design image URL as visual reference: " + (data.PreviewImageUrl ?? data.RoomImageUrl) + "\n\n" +
                                    "Design prompt: " + prompt
                         }
                     }
@@ -111,60 +168,6 @@ public class OpenAiService(HttpClient httpClient, IOptions<OpenAiOptions> option
         }
 
         return ExtractGeminiText(body);
-    }
-
-    private async Task<string> GenerateImageWithGeminiAsync(string prompt, RoomAiPromptData data, CancellationToken cancellationToken)
-    {
-        var imagePrompt = prompt + "\n\nCreate one realistic final room image. Use only the listed furniture. " +
-                          "Keep the room structure, lighting, camera angle, and perspective close to this uploaded room image URL: " + data.RoomImageUrl + "\n\n" +
-                          "Furniture to include: " + string.Join("; ", data.Products.Select(product => $"{product.Name}, {product.Color}, {product.Material}, image: {product.ImageUrl}"));
-
-        var request = new
-        {
-            contents = new[]
-            {
-                new
-                {
-                    parts = new[]
-                    {
-                        new { text = imagePrompt }
-                    }
-                }
-            },
-            generationConfig = new
-            {
-                responseModalities = new[] { "TEXT", "IMAGE" }
-            }
-        };
-
-        using var response = await httpClient.PostAsJsonAsync(GeminiUrl(_geminiOptions.ImageModel), request, cancellationToken);
-        var body = await response.Content.ReadAsStringAsync(cancellationToken);
-
-        if (!response.IsSuccessStatusCode)
-        {
-            throw new InvalidOperationException($"Gemini image generation failed: {body}");
-        }
-
-        using var document = JsonDocument.Parse(body);
-        foreach (var candidate in document.RootElement.GetProperty("candidates").EnumerateArray())
-        {
-            foreach (var part in candidate.GetProperty("content").GetProperty("parts").EnumerateArray())
-            {
-                if (!part.TryGetProperty("inlineData", out var inlineData))
-                {
-                    continue;
-                }
-
-                var mimeType = inlineData.GetProperty("mimeType").GetString() ?? "image/png";
-                var base64 = inlineData.GetProperty("data").GetString();
-                if (!string.IsNullOrWhiteSpace(base64))
-                {
-                    return $"data:{mimeType};base64,{base64}";
-                }
-            }
-        }
-
-        throw new InvalidOperationException("Gemini image generation did not return image data.");
     }
 
     private async Task<string> AnalyzeRoomAsync(string prompt, RoomAiPromptData data, CancellationToken cancellationToken)
@@ -200,39 +203,6 @@ public class OpenAiService(HttpClient httpClient, IOptions<OpenAiOptions> option
         return document.RootElement.GetProperty("choices")[0].GetProperty("message").GetProperty("content").GetString() ?? "{}";
     }
 
-    private async Task<string> GenerateImageEditAsync(string prompt, Stream previewImageStream, string previewImageContentType, string previewImageFileName, CancellationToken cancellationToken)
-    {
-        using var request = new MultipartFormDataContent
-        {
-            { new StringContent(_options.ImageModel), "model" },
-            { new StringContent(prompt), "prompt" },
-            { new StringContent("1024x1024"), "size" },
-            { new StringContent("high"), "input_fidelity" }
-        };
-
-        var imageContent = new StreamContent(previewImageStream);
-        imageContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(string.IsNullOrWhiteSpace(previewImageContentType) ? "image/png" : previewImageContentType);
-        request.Add(imageContent, "image", string.IsNullOrWhiteSpace(previewImageFileName) ? "preview.png" : previewImageFileName);
-
-        using var response = await httpClient.PostAsync("https://api.openai.com/v1/images/edits", request, cancellationToken);
-        var body = await response.Content.ReadAsStringAsync(cancellationToken);
-
-        if (!response.IsSuccessStatusCode)
-        {
-            throw new InvalidOperationException($"OpenAI preview image generation failed: {body}");
-        }
-
-        using var document = JsonDocument.Parse(body);
-        var base64 = document.RootElement.GetProperty("data")[0].GetProperty("b64_json").GetString();
-
-        if (string.IsNullOrWhiteSpace(base64))
-        {
-            throw new InvalidOperationException("OpenAI preview image generation did not return image data.");
-        }
-
-        return $"data:image/png;base64,{base64}";
-    }
-
     private static OpenAiRoomResult CreateFallbackResult(RoomAiPromptData data)
     {
         var analysis = new
@@ -250,8 +220,7 @@ public class OpenAiService(HttpClient httpClient, IOptions<OpenAiOptions> option
 
         return new OpenAiRoomResult
         {
-            AnalysisJson = JsonSerializer.Serialize(analysis),
-            GeneratedImageSourceUrl = data.PreviewImageUrl ?? data.RoomImageUrl
+            AnalysisJson = JsonSerializer.Serialize(analysis)
         };
     }
 

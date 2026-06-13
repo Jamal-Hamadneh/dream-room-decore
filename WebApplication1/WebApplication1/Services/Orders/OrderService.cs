@@ -7,7 +7,10 @@ using WebApplication1.Repositories;
 
 namespace WebApplication1.Services;
 
-public interface IOrderService : ICrudService<OrderRequest, OrderResponse>;
+public interface IOrderService : ICrudService<OrderRequest, OrderResponse>
+{
+    Task<PagedResult<OrderResponse>> GetPagedAsync(int page, int limit, string? sort, CancellationToken cancellationToken = default);
+}
 
 public class OrderService(IOrderRepository repository, ICrudMapper<Order, OrderRequest, OrderResponse> mapper, ApplicationDbContext context)
     : CrudService<Order, OrderRequest, OrderResponse>(repository, mapper), IOrderService
@@ -61,6 +64,50 @@ public class OrderService(IOrderRepository repository, ICrudMapper<Order, OrderR
         await context.SaveChangesAsync(cancellationToken);
 
         return await GetByIdAsync(id, cancellationToken);
+    }
+
+    public async Task<PagedResult<OrderResponse>> GetPagedAsync(int page, int limit, string? sort, CancellationToken cancellationToken = default)
+    {
+        page = page < 1 ? 1 : page;
+        limit = limit < 1 ? 5 : limit;
+
+        var query = ApplySort(Query(), sort);
+
+        var totalCount = await query.CountAsync(cancellationToken);
+        var orders = await query.Skip((page - 1) * limit).Take(limit).ToListAsync(cancellationToken);
+
+        return new PagedResult<OrderResponse>
+        {
+            Items = orders.Select(ToResponse).ToList(),
+            Page = page,
+            Limit = limit,
+            TotalCount = totalCount,
+            TotalPages = totalCount == 0 ? 0 : (int)Math.Ceiling(totalCount / (double)limit)
+        };
+    }
+
+    private static IQueryable<Order> ApplySort(IQueryable<Order> query, string? sort)
+    {
+        var (field, descending) = ParseSort(sort);
+        return field switch
+        {
+            "totalprice" => descending ? query.OrderByDescending(order => order.TotalPrice) : query.OrderBy(order => order.TotalPrice),
+            "status" => descending ? query.OrderByDescending(order => order.Status) : query.OrderBy(order => order.Status),
+            _ => descending ? query.OrderByDescending(order => order.CreatedAt) : query.OrderBy(order => order.CreatedAt)
+        };
+    }
+
+    private static (string Field, bool Descending) ParseSort(string? sort)
+    {
+        if (string.IsNullOrWhiteSpace(sort))
+        {
+            return ("createdat", true);
+        }
+
+        var parts = sort.Split(':', 2);
+        var field = parts[0].Trim().ToLowerInvariant();
+        var descending = parts.Length < 2 || !string.Equals(parts[1].Trim(), "asc", StringComparison.OrdinalIgnoreCase);
+        return (field, descending);
     }
 
     private IQueryable<Order> Query() => context.Orders
