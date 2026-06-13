@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { Loader2 } from "lucide-react";
 import { api } from "@/lib/api";
 
 export function AdminUsers() {
@@ -11,7 +12,9 @@ export function AdminUsers() {
     <div>
       <h2 className="mb-4 font-display text-2xl">Users {users && <span className="text-muted-foreground">({users.length})</span>}</h2>
       {isLoading ? (
-        <p className="text-muted-foreground">Loading…</p>
+        <div className="flex items-center justify-center py-16">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        </div>
       ) : (
         <div className="overflow-x-auto rounded-xl border border-border">
           <table className="w-full text-sm">

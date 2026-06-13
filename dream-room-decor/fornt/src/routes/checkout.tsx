@@ -292,8 +292,13 @@ function PaymentForm({
     }
 
     if (paymentIntent?.status === "succeeded" || paymentIntent?.status === "processing") {
-      // Fire-and-forget — don't block the success screen on a backend sync call
-      api.stripe.syncPaymentIntent(paymentIntentId).catch(() => {});
+      // Await the sync so the DB is updated (payment status + stock) before we show success.
+      // If it fails for any reason, still proceed — Stripe already confirmed the payment.
+      try {
+        await api.stripe.syncPaymentIntent(paymentIntentId);
+      } catch {
+        // no-op
+      }
       onSuccess();
     } else {
       setCardError("Payment did not complete. Please try again.");

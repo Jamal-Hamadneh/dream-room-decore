@@ -315,6 +315,33 @@ export type SyncPaymentIntentResponse = {
   stripeStatus: string;
 };
 
+// ─── Stats / Dashboard ──────────────────────────────────────────────────────
+
+export type StatsSummaryResponse = {
+  totalRevenue: number;
+  orderCount: number;
+  customerCount: number;
+  averageOrderValue: number;
+};
+
+export type MonthlyRevenuePoint = {
+  month: number;
+  monthName: string;
+  revenue: number;
+};
+
+export type MonthlyRevenueResponse = {
+  year: number;
+  months: MonthlyRevenuePoint[];
+};
+
+export type CategorySalesResponse = {
+  categoryId: number;
+  categoryName: string;
+  revenue: number;
+  percentage: number;
+};
+
 // Form input for create/update of a product (mirrors ProductRequest).
 export type ProductInput = {
   categoryId: number;

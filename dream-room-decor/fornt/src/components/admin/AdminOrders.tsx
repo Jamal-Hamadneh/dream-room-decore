@@ -1,4 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { resolveImage } from "@/lib/catalog";
@@ -50,7 +51,9 @@ export function AdminOrders() {
       </h2>
 
       {isLoading ? (
-        <p className="text-muted-foreground">Loading…</p>
+        <div className="flex items-center justify-center py-16">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        </div>
       ) : !orders || orders.length === 0 ? (
         <p className="text-muted-foreground">No orders yet.</p>
       ) : (

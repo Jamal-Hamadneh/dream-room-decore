@@ -83,7 +83,9 @@ function OrdersPage() {
       </div>
 
       {isLoading ? (
-        <p className="text-muted-foreground">Loading your orders…</p>
+        <div className="flex items-center justify-center py-16">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        </div>
       ) : !orders || orders.length === 0 ? (
         <div className="rounded-xl border border-dashed border-border bg-cream/50 p-12 text-center">
           <Package className="mx-auto h-9 w-9 text-muted-foreground" />

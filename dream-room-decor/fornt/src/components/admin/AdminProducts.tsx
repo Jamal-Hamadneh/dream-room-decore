@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ImagePlus, Palette, Pencil, Plus, Trash2, Upload, X } from "lucide-react";
+import { ImagePlus, Loader2, Palette, Pencil, Plus, Trash2, Upload, X } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import type { ProductInput, ProductResponse } from "@/lib/types";
@@ -493,7 +493,9 @@ export function AdminProducts() {
 
       {/* ── Products table ── */}
       {isLoading ? (
-        <p className="text-muted-foreground">Loading products…</p>
+        <div className="flex items-center justify-center py-16">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        </div>
       ) : (
         <div className="overflow-x-auto rounded-xl border border-border">
           <table className="w-full text-sm">

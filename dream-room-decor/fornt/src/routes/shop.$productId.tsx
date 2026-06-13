@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { useState } from "react";
-import { ArrowLeft, Heart, Minus, Plus, ShoppingBag, Check } from "lucide-react";
+import { ArrowLeft, Check, Heart, Loader2, Minus, Plus, ShoppingBag } from "lucide-react";
 import { findProduct } from "@/data/products";
 import { useApp } from "@/context/AppContext";
 import { ProductCard } from "@/components/ProductCard";
@@ -41,7 +41,9 @@ function ProductPage() {
   if (!product) {
     return (
       <div className="mx-auto max-w-3xl px-6 py-24 text-center">
-        <h1 className="font-display text-3xl">{isLoading ? "Loading…" : "Product not found"}</h1>
+        <h1 className="font-display text-3xl">
+          {isLoading ? <Loader2 className="mx-auto h-8 w-8 animate-spin text-muted-foreground" /> : "Product not found"}
+        </h1>
       </div>
     );
   }

@@ -1,7 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
-import { Boxes, LayoutDashboard, ShoppingCart, Tags, Users } from "lucide-react";
+import { Boxes, LayoutDashboard, ShoppingCart, Tags, Users, Gauge } from "lucide-react";
 import { useRequireAdmin } from "@/hooks/useAuthGuard";
+import { AdminDashboard } from "@/components/admin/AdminDashboard";
 import { AdminProducts } from "@/components/admin/AdminProducts";
 import { AdminCategories } from "@/components/admin/AdminCategories";
 import { AdminOrders } from "@/components/admin/AdminOrders";
@@ -13,6 +14,7 @@ export const Route = createFileRoute("/admin")({
 });
 
 const TABS = [
+  { id: "dashboard", label: "Dashboard", icon: Gauge, render: () => <AdminDashboard /> },
   { id: "products", label: "Products", icon: Boxes, render: () => <AdminProducts /> },
   { id: "categories", label: "Categories", icon: Tags, render: () => <AdminCategories /> },
   { id: "orders", label: "Orders", icon: ShoppingCart, render: () => <AdminOrders /> },
@@ -21,7 +23,7 @@ const TABS = [
 
 function AdminPage() {
   const { ready } = useRequireAdmin();
-  const [tab, setTab] = useState<(typeof TABS)[number]["id"]>("products");
+  const [tab, setTab] = useState<(typeof TABS)[number]["id"]>("dashboard");
 
   if (!ready) return null;
 

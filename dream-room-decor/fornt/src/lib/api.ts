@@ -28,6 +28,9 @@ import type {
   ChatMessageResponse,
   ConversationSummaryResponse,
   ConversationDetailResponse,
+  StatsSummaryResponse,
+  MonthlyRevenueResponse,
+  CategorySalesResponse,
   StripeConfigResponse,
   CreatePaymentIntentResponse,
   SyncPaymentIntentResponse,
@@ -443,6 +446,14 @@ export const api = {
       request<CreatePaymentIntentResponse>("/stripe/payment-intents", { method: "POST", body: { orderId } }),
     syncPaymentIntent: (paymentIntentId: string) =>
       request<SyncPaymentIntentResponse>("/stripe/sync-payment-intent", { method: "POST", body: { paymentIntentId } }),
+  },
+
+  // ── Stats / Dashboard ────────────────────────────────────────────────────────
+  stats: {
+    getSummary: () => request<StatsSummaryResponse>("/stats/summary"),
+    getRevenue: (year?: number) =>
+      request<MonthlyRevenueResponse>(`/stats/revenue${year ? `?year=${year}` : ""}`),
+    getCategories: () => request<CategorySalesResponse[]>("/stats/categories"),
   },
 
   // ── Chat assistant ───────────────────────────────────────────────────────────

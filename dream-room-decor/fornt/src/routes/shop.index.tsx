@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
-import { Search } from "lucide-react";
+import { Loader2, Search } from "lucide-react";
 import { ProductCard } from "@/components/ProductCard";
 import { useProducts, useCategories } from "@/hooks/useCatalog";
 
@@ -61,7 +61,7 @@ function ShopPage() {
       <div className="mb-10">
         <h1 className="font-display text-4xl md:text-5xl">The collection</h1>
         <p className="mt-2 text-muted-foreground">
-          {isLoading ? "Loading…" : `${filtered.length} ${filtered.length === 1 ? "piece" : "pieces"}`}
+          {isLoading ? <Loader2 className="inline h-4 w-4 animate-spin" /> : `${filtered.length} ${filtered.length === 1 ? "piece" : "pieces"}`}
         </p>
       </div>
 
