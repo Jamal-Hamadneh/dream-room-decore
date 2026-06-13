@@ -1,27 +1,47 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useApp } from "@/context/AppContext";
 
 export const Route = createFileRoute("/signup")({
-  head: () => ({ meta: [{ title: "Create account — haus" }] }),
+  head: () => ({ meta: [{ title: "Create account — Dream Room Decor" }] }),
   component: SignupPage,
 });
 
 function SignupPage() {
-  const { signIn } = useApp();
+  const { signUp, user, authReady } = useApp();
   const navigate = useNavigate();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [err, setErr] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const submit = (e: React.FormEvent) => {
+  // Already signed in? Skip the form and go home.
+  useEffect(() => {
+    if (authReady && user) navigate({ to: "/" });
+  }, [authReady, user, navigate]);
+
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setErr("");
     if (!name.trim()) return setErr("Please enter your name.");
     if (!email.includes("@")) return setErr("Enter a valid email.");
-    if (password.length < 6) return setErr("Password must be at least 6 characters.");
-    signIn(email, name);
-    navigate({ to: "/profile" });
+    if (password.length < 8) return setErr("Password must be at least 8 characters.");
+
+    const trimmed = name.trim();
+    const spaceIdx = trimmed.indexOf(" ");
+    const firstName = spaceIdx === -1 ? trimmed : trimmed.slice(0, spaceIdx);
+    const lastName = spaceIdx === -1 ? trimmed : trimmed.slice(spaceIdx + 1);
+
+    setLoading(true);
+    try {
+      await signUp(firstName, lastName, email, password);
+      navigate({ to: "/" });
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Could not create your account.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -34,8 +54,11 @@ function SignupPage() {
         <Field label="Email" type="email" value={email} onChange={(v) => setEmail(v)} />
         <Field label="Password" type="password" value={password} onChange={(v) => setPassword(v)} />
         {err && <p className="text-sm text-destructive">{err}</p>}
-        <button className="w-full rounded-full bg-primary px-6 py-3 text-sm font-medium text-primary-foreground transition hover:opacity-90">
-          Create account
+        <button
+          disabled={loading}
+          className="w-full rounded-full bg-primary px-6 py-3 text-sm font-medium text-primary-foreground transition hover:opacity-90 disabled:opacity-60"
+        >
+          {loading ? "Creating account…" : "Create account"}
         </button>
       </form>
 

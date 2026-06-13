@@ -1,24 +1,24 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { Search } from "lucide-react";
-import { PRODUCTS, CATEGORIES, Category } from "@/data/products";
 import { ProductCard } from "@/components/ProductCard";
+import { useProducts, useCategories } from "@/hooks/useCatalog";
 
 type ShopSearch = {
-  category?: Category | "All";
+  category?: string;
 };
 
 export const Route = createFileRoute("/shop/")({
   head: () => ({
     meta: [
-      { title: "Shop — haus" },
+      { title: "Shop — Dream Room Decor" },
       { name: "description", content: "Browse sofas, beds, chairs, tables and more. Filter by category and price." },
-      { property: "og:title", content: "Shop — haus" },
+      { property: "og:title", content: "Shop — Dream Room Decor" },
       { property: "og:description", content: "Browse our full collection of Scandinavian furniture." },
     ],
   }),
   validateSearch: (search: Record<string, unknown>): ShopSearch => ({
-    category: (search.category as Category | "All") ?? "All",
+    category: (search.category as string) ?? "All",
   }),
   component: ShopPage,
 });
@@ -26,28 +26,42 @@ export const Route = createFileRoute("/shop/")({
 function ShopPage() {
   const { category: initialCategory } = Route.useSearch();
   const navigate = Route.useNavigate();
+  const { products, isLoading } = useProducts();
+  const { categories } = useCategories();
   const [query, setQuery] = useState("");
   const [maxPrice, setMaxPrice] = useState(1500);
 
   const category = initialCategory ?? "All";
-  const setCategory = (c: Category | "All") =>
+  const setCategory = (c: string) =>
     navigate({ search: { category: c === "All" ? undefined : c } });
 
+  // Categories actually present in the catalog (merged with backend list).
+  const categoryOptions = useMemo(() => {
+    const set = new Set<string>([...categories, ...products.map((p) => p.category)]);
+    set.delete("");
+    return Array.from(set);
+  }, [categories, products]);
+
+  const priceCeiling = useMemo(
+    () => Math.max(1500, ...products.map((p) => p.price)),
+    [products],
+  );
+
   const filtered = useMemo(() => {
-    return PRODUCTS.filter((p) => {
+    return products.filter((p) => {
       if (category !== "All" && p.category !== category) return false;
       if (p.price > maxPrice) return false;
       if (query && !p.name.toLowerCase().includes(query.toLowerCase())) return false;
       return true;
     });
-  }, [category, maxPrice, query]);
+  }, [products, category, maxPrice, query]);
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
       <div className="mb-10">
         <h1 className="font-display text-4xl md:text-5xl">The collection</h1>
         <p className="mt-2 text-muted-foreground">
-          {filtered.length} {filtered.length === 1 ? "piece" : "pieces"}
+          {isLoading ? "Loading…" : `${filtered.length} ${filtered.length === 1 ? "piece" : "pieces"}`}
         </p>
       </div>
 
@@ -71,7 +85,7 @@ function ShopPage() {
               Category
             </h3>
             <ul className="space-y-1.5">
-              {(["All", ...CATEGORIES] as const).map((c) => (
+              {["All", ...categoryOptions].map((c) => (
                 <li key={c}>
                   <button
                     onClick={() => setCategory(c)}
@@ -92,8 +106,8 @@ function ShopPage() {
             </h3>
             <input
               type="range"
-              min={200}
-              max={1500}
+              min={50}
+              max={priceCeiling}
               step={50}
               value={maxPrice}
               onChange={(e) => setMaxPrice(Number(e.target.value))}

@@ -6,9 +6,11 @@ import wardrobe from "@/assets/product-wardrobe.jpg";
 import lamp from "@/assets/product-lamp.jpg";
 import shelf from "@/assets/product-shelf.jpg";
 
-export type Category = "Sofas" | "Beds" | "Chairs" | "Tables" | "Wardrobes" | "Lighting" | "Storage";
+// Category is a plain string so it can hold either the bundled demo categories
+// or whatever categories the backend returns (e.g. "Living Room", "Bedroom").
+export type Category = string;
 
-export const CATEGORIES: Category[] = [
+export const CATEGORIES: string[] = [
   "Sofas", "Beds", "Chairs", "Tables", "Wardrobes", "Lighting", "Storage",
 ];
 
@@ -20,6 +22,9 @@ export type Product = {
   image: string;
   description: string;
   features: string[];
+  // Optional backend-only fields (undefined for bundled demo products).
+  stock?: number;
+  categoryId?: number;
 };
 
 export const PRODUCTS: Product[] = [

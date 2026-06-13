@@ -6,4 +6,28 @@
 // You can pass additional config via defineConfig({ vite: { ... } }) if needed.
 import { defineConfig } from "@lovable.dev/vite-tanstack-config";
 
-export default defineConfig();
+// The backend (ASP.NET Core) has no CORS configured and must not be edited.
+// We proxy /api through the dev server so the browser stays same-origin and
+// never triggers a CORS preflight. Point this at the backend's HTTP endpoint.
+const API_TARGET = process.env.VITE_API_TARGET ?? "http://localhost:5039";
+
+export default defineConfig({
+  vite: {
+    server: {
+      proxy: {
+        "/api": {
+          target: API_TARGET,
+          changeOrigin: true,
+          secure: false,
+        },
+        // The AI Room controller is routed at /AiRoom (not under /api),
+        // so it needs its own proxy entry to stay same-origin.
+        "/AiRoom": {
+          target: API_TARGET,
+          changeOrigin: true,
+          secure: false,
+        },
+      },
+    },
+  },
+});

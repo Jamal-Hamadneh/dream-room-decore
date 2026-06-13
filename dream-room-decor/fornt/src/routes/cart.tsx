@@ -5,7 +5,7 @@ import { useApp } from "@/context/AppContext";
 export const Route = createFileRoute("/cart")({
   head: () => ({
     meta: [
-      { title: "Cart — haus" },
+      { title: "Cart — Dream Room Decor" },
       { name: "description", content: "Review your cart and checkout." },
     ],
   }),

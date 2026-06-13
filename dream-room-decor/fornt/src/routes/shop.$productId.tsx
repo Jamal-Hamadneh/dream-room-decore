@@ -1,18 +1,20 @@
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { useState } from "react";
 import { ArrowLeft, Heart, Minus, Plus, ShoppingBag, Check } from "lucide-react";
-import { findProduct, PRODUCTS } from "@/data/products";
+import { findProduct } from "@/data/products";
 import { useApp } from "@/context/AppContext";
 import { ProductCard } from "@/components/ProductCard";
+import { useProduct, useProducts } from "@/hooks/useCatalog";
+import { ProductReviews } from "@/components/ProductReviews";
 
 export const Route = createFileRoute("/shop/$productId")({
   head: ({ params }) => {
     const product = findProduct(params.productId);
     return {
       meta: [
-        { title: product ? `${product.name} — haus` : "Product — haus" },
+        { title: product ? `${product.name} — Dream Room Decor` : "Product — Dream Room Decor" },
         { name: "description", content: product?.description ?? "Furniture detail" },
-        { property: "og:title", content: product?.name ?? "haus" },
+        { property: "og:title", content: product?.name ?? "Dream Room Decor" },
         { property: "og:description", content: product?.description ?? "" },
         ...(product ? [{ property: "og:image", content: product.image }] : []),
       ],
@@ -30,7 +32,8 @@ export const Route = createFileRoute("/shop/$productId")({
 function ProductPage() {
   const { productId } = Route.useParams();
   const router = useRouter();
-  const product = findProduct(productId);
+  const { product, isLoading } = useProduct(productId);
+  const { products } = useProducts();
   const { addToCart, toggleWishlist, isWishlisted } = useApp();
   const [qty, setQty] = useState(1);
   const [added, setAdded] = useState(false);
@@ -38,12 +41,12 @@ function ProductPage() {
   if (!product) {
     return (
       <div className="mx-auto max-w-3xl px-6 py-24 text-center">
-        <h1 className="font-display text-3xl">Product not found</h1>
+        <h1 className="font-display text-3xl">{isLoading ? "Loading…" : "Product not found"}</h1>
       </div>
     );
   }
 
-  const related = PRODUCTS.filter((p) => p.category === product.category && p.id !== product.id).slice(0, 4);
+  const related = products.filter((p) => p.category === product.category && p.id !== product.id).slice(0, 4);
 
   const handleAdd = () => {
     addToCart(product, qty);
@@ -133,6 +136,8 @@ function ProductPage() {
           </p>
         </div>
       </div>
+
+      <ProductReviews productId={product.id} />
 
       {related.length > 0 && (
         <section className="mt-24">

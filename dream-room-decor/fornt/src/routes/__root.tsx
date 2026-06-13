@@ -1,9 +1,14 @@
 import { Outlet, Link, createRootRoute, HeadContent, Scripts } from "@tanstack/react-router";
+import { QueryClientProvider } from "@tanstack/react-query";
+import { useState } from "react";
 
 import appCss from "../styles.css?url";
 import { AppProvider } from "@/context/AppContext";
 import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/components/Footer";
+import { ChatWidget } from "@/components/ChatWidget";
+import { Toaster } from "@/components/ui/sonner";
+import { makeQueryClient } from "@/lib/queryClient";
 
 function NotFoundComponent() {
   return (
@@ -32,9 +37,9 @@ export const Route = createRootRoute({
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "haus — Honest Scandinavian furniture" },
+      { title: "Dream Room Decor — Furniture for every home" },
       { name: "description", content: "Warm, considered furniture for everyday living. Shop sofas, beds, tables and design your room with AI." },
-      { property: "og:title", content: "haus — Honest Scandinavian furniture" },
+      { property: "og:title", content: "Dream Room Decor — Furniture for every home" },
       { property: "og:description", content: "Warm, considered furniture for everyday living." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
@@ -63,15 +68,21 @@ function RootShell({ children }: { children: React.ReactNode }) {
 }
 
 function RootComponent() {
+  const [queryClient] = useState(() => makeQueryClient());
+
   return (
-    <AppProvider>
-      <div className="flex min-h-screen flex-col">
-        <Navbar />
-        <main className="flex-1">
-          <Outlet />
-        </main>
-        <Footer />
-      </div>
-    </AppProvider>
+    <QueryClientProvider client={queryClient}>
+      <AppProvider>
+        <div className="flex min-h-screen flex-col">
+          <Navbar />
+          <main className="flex-1">
+            <Outlet />
+          </main>
+          <Footer />
+        </div>
+        <ChatWidget />
+        <Toaster position="top-center" richColors />
+      </AppProvider>
+    </QueryClientProvider>
   );
 }

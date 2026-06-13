@@ -1,21 +1,22 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ArrowRight, Sparkles, Truck, Leaf, Award } from "lucide-react";
 import heroImg from "@/assets/hero-living-room.jpg";
-import { PRODUCTS, CATEGORIES } from "@/data/products";
 import { ProductCard } from "@/components/ProductCard";
+import { useProducts, useCategories } from "@/hooks/useCatalog";
 
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "haus — Honest Scandinavian furniture" },
+      { title: "Dream Room Decor — Furniture for every home" },
       { name: "description", content: "Warm, considered furniture for everyday living. Shop sofas, beds, tables and design your room with AI." },
-      { property: "og:title", content: "haus — Honest Scandinavian furniture" },
+      { property: "og:title", content: "Dream Room Decor — Furniture for every home" },
       { property: "og:description", content: "Warm, considered furniture for everyday living." },
     ],
   }),
   component: HomePage,
 });
 
+const TINT_CYCLE = ["bg-cream", "bg-sand", "bg-muted"];
 const categoryTints: Record<string, string> = {
   Sofas: "bg-cream",
   Beds: "bg-sand",
@@ -25,9 +26,14 @@ const categoryTints: Record<string, string> = {
   Lighting: "bg-muted",
   Storage: "bg-cream",
 };
+function categoryTint(name: string, idx: number) {
+  return categoryTints[name] ?? TINT_CYCLE[idx % TINT_CYCLE.length];
+}
 
 function HomePage() {
-  const featured = PRODUCTS.slice(0, 4);
+  const { products } = useProducts();
+  const { categories } = useCategories();
+  const featured = products.slice(0, 4);
 
   return (
     <div>
@@ -83,12 +89,12 @@ function HomePage() {
           </Link>
         </div>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7">
-          {CATEGORIES.map((c) => (
+          {categories.map((c, i) => (
             <Link
               key={c}
               to="/shop"
               search={{ category: c }}
-              className={`group flex aspect-square flex-col items-center justify-center rounded-xl border border-border/40 ${categoryTints[c]} p-4 text-center transition hover:-translate-y-0.5 hover:shadow-[var(--shadow-soft)]`}
+              className={`group flex aspect-square flex-col items-center justify-center rounded-xl border border-border/40 ${categoryTint(c, i)} p-4 text-center transition hover:-translate-y-0.5 hover:shadow-[var(--shadow-soft)]`}
             >
               <span className="font-display text-lg group-hover:text-accent">{c}</span>
             </Link>

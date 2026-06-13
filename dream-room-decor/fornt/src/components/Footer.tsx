@@ -4,15 +4,12 @@ export function Footer() {
       <div className="mx-auto grid max-w-7xl gap-10 px-4 py-14 sm:px-6 md:grid-cols-4 lg:px-8">
         <div>
           <div className="font-display text-2xl font-semibold">
-            haus<span className="text-accent">.</span>
+            Dream Room Decor<span className="text-accent">.</span>
           </div>
           <p className="mt-3 max-w-xs text-sm text-muted-foreground">
             Honest furniture, made to live with for years. Designed in Copenhagen.
           </p>
         </div>
-
-
-        
         <div>
           <h4 className="mb-3 text-xs font-semibold uppercase tracking-widest text-muted-foreground">Shop</h4>
           <ul className="space-y-2 text-sm">
@@ -33,7 +30,7 @@ export function Footer() {
         </div>
       </div>
       <div className="border-t border-border/60 px-6 py-5 text-center text-xs text-muted-foreground">
-        © {new Date().getFullYear()} haus studio. All rights reserved.
+        © {new Date().getFullYear()} Dream Room Decor. All rights reserved.
       </div>
     </footer>
   );
