@@ -1,0 +1,71 @@
+## Build results
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+bld/
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+
+## Visual Studio
+.vs/
+*.user
+*.rsuser
+*.suo
+*.userosscache
+*.sln.docstates
+*.ncrunch*
+*.DotSettings.user
+
+## VS Code / Rider
+.vscode/
+.idea/
+*.sln.iml
+
+## ASP.NET / .NET
+appsettings.Local.json
+appsettings.*.local.json
+appsettings.Production.json
+Properties/ServiceDependencies/
+Properties/serviceDependencies.*.json
+Properties/PublishProfiles/*.pubxml.user
+*.publishsettings
+wwwroot/uploads/
+
+## NuGet
+*.nupkg
+*.snupkg
+packages/
+project.lock.json
+project.fragment.lock.json
+artifacts/
+
+## Test / coverage
+TestResults/
+coverage/
+*.coverage
+*.coveragexml
+*.trx
+coverage.cobertura.xml
+
+## Databases / generated SQL
+*.db
+*.db-shm
+*.db-wal
+*.mdf
+*.ldf
+*.bak
+
+## OS files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+## Secrets / env
+.env
+.env.*
+secrets.json
